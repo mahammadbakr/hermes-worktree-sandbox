@@ -235,6 +235,7 @@ def test_concurrent_distinct_worktrees_all_exist(manager, git_repo: Path) -> Non
 
 def test_repeated_register_is_clean(manager, ledger) -> None:
     """register() must be idempotent-ish: no import-time state leaks between loads."""
+    pytest.importorskip("agent.terminal_env_provider", reason="needs a Hermes Agent checkout")
     from worktree_sandbox import register
 
     class Stub:
@@ -323,12 +324,16 @@ def test_ledger_migrates_a_v0_schema(tmp_path: Path) -> None:
 # --- 10. git unavailable ---------------------------------------------------- #
 
 def test_missing_git_is_reported_not_crashed(manager, git_repo: Path, monkeypatch) -> None:
+    pytest.importorskip("agent.terminal_env_provider", reason="needs a Hermes Agent checkout")
+
     import shutil as _shutil
 
-    monkeypatch.setattr(_shutil, "which", lambda name: None if name == "git" else "/usr/bin/" + name)
-    monkeypatch.setattr("worktree_sandbox.provider.shutil.which", lambda name: None)
-
     from worktree_sandbox.provider import WorktreeSandboxProvider
+
+    # provider.shutil *is* the shutil module, so one patch covers it.
+    monkeypatch.setattr(_shutil, "which", lambda name: None if name == "git" else "/usr/bin/" + name)
+
+    provider = WorktreeSandboxProvider(get_config=lambda k, d=None: d, manager=manager)
 
     provider = WorktreeSandboxProvider(get_config=lambda k, d=None: d, manager=manager)
     assert provider.is_available() is False

@@ -22,8 +22,8 @@
       the owner/name differs)
 - [ ] `git push -u origin main` from the repo root
 - [ ] Re-pin `sha` in `catalog-entry/worktree-sandbox.yaml` to the pushed 40-char commit
-- [ ] Copy the entry to `plugin-catalog/worktree-sandbox.yaml` in a fork of `NousResearch/hermes-agent`,
-      open the PR with the template in `docs/SUBMISSION.md`, and keep the PR to catalog files only
+- [ ] Copy the entry to `plugin-catalog/worktree-sandbox.yaml` in a fork of `NousResearch/hermes-agent`
+      and open the PR (PR title/description copy is produced in the next step)
 - [ ] Record the 90-second video from `DEMO.md`, post on X tagging @NousResearch, verify both links
       while logged out, submit through the entry form
 - [ ] Join the Nous Research Discord and watch the entry's thread for maintainer questions
