@@ -12,7 +12,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from helpers import PLUGIN_DIR
 
 REPO_ROOT = PLUGIN_DIR.parent
@@ -137,13 +136,29 @@ def test_referenced_doc_assets_exist() -> None:
         assert (REPO_ROOT / target).is_file(), f"README references a missing asset: {target}"
 
 
-def test_plugin_tree_has_no_bytecode_or_binaries() -> None:
-    bad = [
+def test_plugin_tree_has_no_committed_bytecode_or_binaries() -> None:
+    """Catalog rule 17: nothing unscannable is *shipped*.
+
+    Hermes's own scanner checks tracked bytecode plus any loose bytecode outside ``__pycache__``
+    (which is gitignored anyway), so this mirrors that rule rather than failing on a local test run.
+    """
+    suffixes = {".pyc", ".pyo", ".so", ".dylib", ".dll", ".exe", ".wasm"}
+    tracked = _git("ls-files", "plugin").stdout.splitlines()
+    committed = [rel for rel in tracked if Path(rel).suffix.lower() in suffixes]
+    assert committed == [], f"committed bytecode/binaries: {committed}"
+
+    loose = [
         str(path.relative_to(REPO_ROOT))
         for path in PLUGIN_DIR.rglob("*")
-        if path.is_file() and path.suffix.lower() in {".pyc", ".pyo", ".so", ".dylib", ".dll", ".exe"}
+        if path.is_file()
+        and path.suffix.lower() in suffixes
+        and "__pycache__" not in path.parts
     ]
-    assert bad == [], bad
+    assert loose == [], f"loose bytecode/binaries: {loose}"
+
+    # And they are gitignored, so a test run cannot leave one in a commit.
+    ignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert "__pycache__/" in ignore and "*.py[cod]" in ignore
 
 
 def test_data_dir_is_never_inside_the_plugin_tree() -> None:
