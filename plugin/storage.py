@@ -95,18 +95,24 @@ class Ledger:
                 self._migrate()
                 self._conn.commit()
                 self._initialized = True
-            return self._conn
+            conn = self._conn
+            if conn is None:  # pragma: no cover - defensive; the block above always assigns one
+                raise RuntimeError("worktree-sandbox: ledger connection unavailable")
+            return conn
 
     def _migrate(self) -> None:
         """Add columns introduced after the first release (safe to run on every open)."""
         from contextlib import suppress
 
+        conn = self._conn
+        if conn is None:  # pragma: no cover - only reachable before the connection is opened
+            return
         for table, columns in _ADDED_COLUMNS.items():
             with suppress(sqlite3.Error):
-                existing = {row[1] for row in self._conn.execute(f"PRAGMA table_info({table})")}
+                existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
                 for name, decl in columns.items():
                     if name not in existing:
-                        self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+                        conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
     def _execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
         with self._lock:

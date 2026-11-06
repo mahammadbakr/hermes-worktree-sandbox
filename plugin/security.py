@@ -16,8 +16,10 @@ out of the shell environment it inherits, and credential files are never copied 
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Mapping
+from pathlib import Path
 
 # Exact environment names that always carry a credential.
 SECRET_ENV_EXACT: frozenset[str] = frozenset({
@@ -103,16 +105,12 @@ _BINARY_SUFFIXES: frozenset[str] = frozenset({
 
 def is_sensitive_filename(name: str) -> bool:
     """Whether a file basename must be treated as a credential and never copied or diffed."""
-    import os
-
     base = os.path.basename(name)
     return bool(_SENSITIVE_NAME_RE.search(base))
 
 
 def should_skip_path(rel_path: str, *, max_bytes: int = 2 * 1024 * 1024) -> bool:
     """Whether a workspace-relative path should be excluded from shadow mirroring / diffs."""
-    import os
-
     parts = [p for p in rel_path.replace("\\", "/").split("/") if p]
     if not parts:
         return True
@@ -154,10 +152,8 @@ def is_safe_relative_path(rel_path: str) -> bool:
     return all(part not in ("", ".", "..") for part in parts)
 
 
-def confine_to_root(root, candidate) -> object:
+def confine_to_root(root: str | Path, candidate: str | Path) -> Path:
     """Resolve *candidate* and require it to live under *root*; raise ``ValueError`` otherwise."""
-    from pathlib import Path
-
     root_resolved = Path(root).resolve()
     target = (root_resolved / candidate).resolve() if not Path(candidate).is_absolute() else Path(candidate).resolve()
     if target != root_resolved and root_resolved not in target.parents:

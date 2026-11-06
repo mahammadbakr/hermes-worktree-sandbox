@@ -36,6 +36,15 @@ def _which_bash() -> str:
     return shutil.which("bash") or "/bin/bash"
 
 
+def _set_pgid(proc: Any, pgid: int | None) -> None:
+    """Attach the process-group id to a Popen handle.
+
+    Hermes's ``BaseEnvironment`` reads helpers off the handle by name and the stdlib
+    ``subprocess.Popen`` stub has no such attribute, so ``proc`` is typed ``Any`` here.
+    """
+    proc._hermes_pgid = pgid
+
+
 def _pipe_stdin(proc: Any, data: str) -> None:
     """Write *data* to ``proc.stdin`` on a daemon thread (mirrors Hermes's own helper).
 
@@ -158,9 +167,9 @@ class WorktreeEnvironment(BaseEnvironment):
             cwd=self.worktree_path,
         )
         try:
-            proc._hermes_pgid = os.getpgid(proc.pid)
+            _set_pgid(proc, os.getpgid(proc.pid))
         except OSError:
-            proc._hermes_pgid = None
+            _set_pgid(proc, None)
         if stdin_data is not None:
             _pipe_stdin(proc, stdin_data)
         return proc

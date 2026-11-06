@@ -44,6 +44,13 @@ def manager(data_dir: Path, ledger):
 
 
 @pytest.fixture
+def runner(manager):
+    from worktree_sandbox.race import RaceRunner
+
+    return RaceRunner(manager)
+
+
+@pytest.fixture
 def git_repo(tmp_path: Path) -> Path:
     require_git()
     repo = tmp_path / "repo"

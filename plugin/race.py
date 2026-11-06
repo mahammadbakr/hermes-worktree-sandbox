@@ -112,9 +112,19 @@ class RaceRunner:
         for index, candidate in enumerate(candidates):
             if not isinstance(candidate, dict):
                 raise WorktreeError(f"candidate {index} must be an object")
+            files = candidate.get("files") or {}
+            if not isinstance(files, dict):
+                raise WorktreeError(f"candidate {index}: 'files' must be an object of path -> content")
+            for rel, content in files.items():
+                if not isinstance(rel, str) or not rel.strip():
+                    raise WorktreeError(f"candidate {index}: file keys must be non-empty strings")
+                if not isinstance(content, str):
+                    raise WorktreeError(
+                        f"candidate {index}: content for {rel!r} must be a string, "
+                        f"got {type(content).__name__}")
             prepared.append({
                 "label": str(candidate.get("label") or f"candidate-{index + 1}")[:40],
-                "files": candidate.get("files") or {},
+                "files": files,
                 "command": candidate.get("command") or None,
                 "setup_command": candidate.get("setup_command") or None,
             })
@@ -147,7 +157,7 @@ class RaceRunner:
                     except WorktreeError:
                         pass
 
-        payload = {
+        payload: dict[str, Any] = {
             "ok": True,
             "race_id": race_id,
             "label": label,
@@ -349,11 +359,17 @@ def demo_verify_command() -> str:
     return f"{shlex.quote(sys.executable)} -m unittest -q test_parser"
 
 
-def run_demo_race(manager: WorktreeManager, *, keep_worktrees: bool = False) -> dict[str, Any]:
-    """Run the built-in offline demo race and return its result."""
-    stamp = time.strftime("%Y%m%d-%H%M%S")
+def run_demo_race(manager: WorktreeManager, *, keep_worktrees: bool = False, keep_projects: int = 3) -> dict[str, Any]:
+    """Run the built-in offline demo race and return its result.
+
+    Seeded projects are trimmed to the newest ``keep_projects`` so repeated demos cannot grow the
+    plugin data directory without bound.
+    """
+    _trim_demo_projects(manager, keep=keep_projects)
+    stamp = time.strftime("%Y%m%d-%H%M%S") + f"-{uuid.uuid4().hex[:4]}"
     demo_root = manager.data_dir / "demo" / stamp
     project = seed_demo_project(demo_root)
+    _trim_demo_projects(manager, keep=keep_projects)
     runner = RaceRunner(manager)
     return runner.race(
         str(project), demo_candidates(),
@@ -362,8 +378,24 @@ def run_demo_race(manager: WorktreeManager, *, keep_worktrees: bool = False) -> 
     )
 
 
+def _trim_demo_projects(manager: WorktreeManager, *, keep: int) -> int:
+    """Delete all but the newest *keep* seeded demo projects; returns how many were removed."""
+    root = manager.data_dir / "demo"
+    if not root.is_dir():
+        return 0
+    try:
+        children = sorted((c for c in root.iterdir() if c.is_dir()), key=lambda c: c.name)
+    except OSError:
+        return 0
+    removed = 0
+    for child in children[:-max(1, keep)]:
+        shutil.rmtree(child, ignore_errors=True)
+        removed += 1
+    return removed
+
+
 def purge_demo_projects(manager: WorktreeManager) -> int:
-    """Remove seeded demo projects (used by `hermes worktree demo --reset`)."""
+    """Remove every seeded demo project (used by `hermes worktree demo --reset`)."""
     root = manager.data_dir / "demo"
     if not root.is_dir():
         return 0

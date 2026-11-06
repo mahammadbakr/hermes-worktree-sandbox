@@ -248,7 +248,18 @@ class WorktreeManager:
             worktree_id, "created", {"base_commit": base_commit, "branch": branch, "shadow": shadow})
         record = self._ledger.get_worktree(worktree_id)
         assert record is not None
-        return self._describe(record)
+        described = self._describe(record)
+        # If the managed worktree lives inside the project's working tree (a HERMES_HOME inside the
+        # repo), git will show it as untracked. Say so instead of claiming the checkout is pristine.
+        try:
+            wt_path.resolve().relative_to(target.resolve())
+            described["note"] = (
+                f"this worktree lives inside your project at {wt_path}; add it to .gitignore "
+                "if you do not want it listed as untracked"
+            )
+        except (ValueError, OSError):
+            pass
+        return described
 
     def get_or_create(self, workspace: str | None, task_id: str = "default") -> dict[str, Any]:
         """Idempotent create used by the terminal-environment provider."""
@@ -268,39 +279,24 @@ class WorktreeManager:
     # -- inspection --------------------------------------------------------------
 
     def _collect_changes(self, wt_path: Path) -> list[dict[str, Any]]:
-        """Return ``[{path, status, added, deleted}]`` for a worktree vs its base commit."""
+        """Return ``[{path, status, added, deleted}]`` for a worktree vs its base commit.
+
+        Uses the NUL-delimited (``-z``) forms of ``--numstat``/``--porcelain`` so filenames with
+        spaces, newlines, quotes or non-ASCII characters are parsed exactly rather than
+        C-quoted and misread — a misread path would make promotion write the wrong file.
+        """
         # ``add -N`` (intent-to-add) makes untracked files appear in ``git diff HEAD`` as
         # full additions without staging their content; the index is reset afterwards.
         self._git(["add", "-N", "--", "."], wt_path)
         try:
-            numstat = self._git(["diff", "--numstat", "HEAD"], wt_path).stdout or ""
-            porcelain = self._git(["status", "--porcelain=v1"], wt_path).stdout or ""
+            numstat = self._git(["diff", "--numstat", "-z", "HEAD"], wt_path).stdout or ""
+            porcelain = self._git(["status", "--porcelain=v1", "-z"], wt_path).stdout or ""
         finally:
             self._git(["reset", "-q"], wt_path)
 
-        stats: dict[str, tuple[int, int, bool]] = {}
-        for line in numstat.splitlines():
-            parts = line.split("\t")
-            if len(parts) < 3:
-                continue
-            added_raw, deleted_raw, path = parts[0], parts[1], parts[2]
-            binary = added_raw == "-" or deleted_raw == "-"
-            try:
-                added = int(added_raw) if not binary else 0
-                deleted = int(deleted_raw) if not binary else 0
-            except ValueError:
-                added = deleted = 0
-            stats[path] = (added, deleted, binary)
-
+        stats = _parse_numstat_z(numstat)
         changes: list[dict[str, Any]] = []
-        for line in porcelain.splitlines():
-            if len(line) < 4:
-                continue
-            code = line[:2]
-            raw_path = line[3:]
-            if " -> " in raw_path:  # rename / copy
-                raw_path = raw_path.split(" -> ", 1)[1]
-            path = raw_path.strip().strip('"')
+        for code, path in _parse_porcelain_z(porcelain):
             if should_skip_path(path):
                 # Build artifacts and credential-shaped files are never reported, diffed or
                 # promoted (consistent with what the shadow mirror excludes).
@@ -381,6 +377,15 @@ class WorktreeManager:
         if wanted:
             changes = [c for c in changes if c["path"] in wanted]
 
+        # Anything the caller named that we are not going to touch: filter-skipped artifacts,
+        # paths outside the repo, or names that simply are not in this worktree's change set.
+        present = {c["path"] for c in changes}
+        filtered = sorted(
+            rel for rel in (wanted or {})
+            if rel not in present and (should_skip_path(rel) or not is_safe_relative_path(rel))
+        )
+        unmatched = sorted(rel for rel in (wanted or {}) if rel not in present and rel not in set(filtered))
+
         stamp = time.strftime("%Y%m%d-%H%M%S")
         backup_dir = self.backups_root / f"{worktree_id}-{stamp}"
         applied: list[str] = []
@@ -396,8 +401,12 @@ class WorktreeManager:
 
             base_content = self._git_show_bytes(repo, record.get("base_commit"), rel)
             host_path = target / rel
-            host_content = host_path.read_bytes() if host_path.is_file() else None
+            host_content = host_path.read_bytes() if host_path.is_file() and not host_path.is_symlink() else None
             src_path = wt_path / rel
+            if src_path.is_symlink():
+                # Never follow a link out of the worktree: its content is not what the diff showed.
+                skipped.append({"path": rel, "reason": "symlinks are not promoted"})
+                continue
             wt_content = src_path.read_bytes() if src_path.is_file() else None
 
             # A host file changed since the worktree branched is a real conflict unless the
@@ -448,6 +457,8 @@ class WorktreeManager:
             "deleted": deleted,
             "conflicts": conflicts,
             "skipped": skipped,
+            "filtered": filtered,
+            "unmatched": unmatched,
             "backup_dir": str(backup_dir) if backup_dir.exists() else None,
         }
 
@@ -527,3 +538,61 @@ _STATUS_LABELS = {
 
 def _status_label(code: str) -> str:
     return _STATUS_LABELS.get(code, _STATUS_LABELS.get(code[0] + " ", "modified"))
+
+
+def _parse_numstat_z(raw: str) -> dict[str, tuple[int, int, bool]]:
+    """Parse ``git diff --numstat -z`` into ``{path: (added, deleted, binary)}``.
+
+    NUL-delimited output is newline-safe. A rename/copy record is ``added\\tdeleted\\t`` (empty
+    path) followed by two further NUL-terminated fields, old then new; we key on the new path.
+    """
+    stats: dict[str, tuple[int, int, bool]] = {}
+    tokens = raw.split("\0")
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        index += 1
+        if not token:
+            continue
+        parts = token.split("\t")
+        added_raw = parts[0] if parts else ""
+        deleted_raw = parts[1] if len(parts) > 1 else ""
+        path = parts[2] if len(parts) > 2 else ""
+        binary = added_raw == "-" or deleted_raw == "-"
+        if not path:
+            # Rename/copy: consume old and new path fields.
+            if index + 1 < len(tokens):
+                index += 1  # old path
+                path = tokens[index]
+                index += 1
+            else:
+                break
+        try:
+            added = int(added_raw) if not binary else 0
+            deleted = int(deleted_raw) if not binary else 0
+        except (TypeError, ValueError):
+            added = deleted = 0
+        stats[path] = (added, deleted, binary)
+    return stats
+
+
+def _parse_porcelain_z(raw: str) -> list[tuple[str, str]]:
+    """Parse ``git status --porcelain=v1 -z`` into ``[(code, path)]``.
+
+    A rename/copy entry is followed by a second NUL-terminated field (the original path), which
+    we skip; the entry's own path is the current one.
+    """
+    entries: list[tuple[str, str]] = []
+    tokens = raw.split("\0")
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        index += 1
+        if len(token) < 4:
+            continue
+        code = token[:2]
+        path = token[3:]
+        if code[0] in ("R", "C") and index < len(tokens):
+            index += 1  # original path of a rename/copy
+        entries.append((code, path))
+    return entries

@@ -18,8 +18,10 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install test dependencies
-        run: pip install pytest ruff pyyaml ruamel.yaml==0.18.17 fastapi
-      - name: Run Ruff linter
+        run: pip install pytest ruff mypy fastapi
+      - name: Ruff linter
         run: ruff check .
-      - name: Run unit tests
+      - name: Type check
+        run: mypy
+      - name: Unit tests
         run: pytest

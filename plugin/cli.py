@@ -58,7 +58,12 @@ class WorktreeCommands:
             target = str(self.manager.peek_workspace(workspace or _workspace()))
             rows = self.manager.list_worktrees(workspace=target)
         except WorktreeError:
-            rows = self.manager.list_worktrees()
+            try:
+                rows = self.manager.list_worktrees()
+            except Exception as exc:  # noqa: BLE001 - a broken manager must still produce text
+                return f"worktree: {exc}"
+        except Exception as exc:  # noqa: BLE001
+            return f"worktree: {exc}"
         if not rows:
             return ("No managed worktrees yet. Set `terminal.backend: worktree` (or call "
                     "`worktree_create`) to isolate a session, or run `/worktree demo` for a live race.")

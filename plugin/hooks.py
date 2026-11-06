@@ -84,11 +84,15 @@ class HookHandlers:
             "added": status["added"], "deleted": status["deleted"], "clean": status["clean"],
         })
 
-    def pre_verify(self, session_id: str = "", **kwargs: Any) -> dict[str, Any] | None:
-        """Run the configured verification command in the newest dirty worktree.
+    def pre_verify(self, session_id: str = "", changed_paths: Any = None, **kwargs: Any) -> dict[str, Any] | None:
+        """Run the configured verification command in the worktree this turn touched.
 
         Returns a ``{"action": "continue", "message": ...}`` directive when verification fails, so
         the agent keeps working instead of declaring success. Empty ``verify_command`` → no-op.
+
+        The worktree is chosen from the turn's ``changed_paths`` so a dirty worktree from another
+        project can never be verified by mistake; without a match we fall back to the newest dirty
+        worktree.
         """
         command = str(self._config("verify_command", "") or "").strip()
         if not command:
@@ -96,7 +100,7 @@ class HookHandlers:
         if session_id and session_id in self._verified:
             return None
 
-        worktree_id = self._newest_dirty_worktree()
+        worktree_id = self._pick_worktree(changed_paths)
         if not worktree_id:
             return None
         if session_id:
@@ -158,3 +162,30 @@ class HookHandlers:
             if not row.get("clean"):
                 return row["worktree_id"]
         return None
+
+    def _pick_worktree(self, changed_paths: Any) -> str | None:
+        """The dirty worktree this turn touched, else the newest dirty one."""
+        try:
+            rows = [row for row in self.manager.list_worktrees() if not row.get("clean")]
+        except Exception:  # pragma: no cover - defensive
+            return None
+        if not rows:
+            return None
+        paths = [p for p in (changed_paths or []) if isinstance(p, str) and p]
+        if paths:
+            from pathlib import Path
+
+            for row in rows:
+                worktree_root = str(row.get("path") or "")
+                workspace_root = str(row.get("workspace") or "")
+                for raw in paths:
+                    if worktree_root and raw.startswith(worktree_root):
+                        return row["worktree_id"]
+                    try:
+                        if workspace_root and (Path(workspace_root) / raw).exists():
+                            return row["worktree_id"]
+                        if worktree_root and (Path(worktree_root) / raw).exists():
+                            return row["worktree_id"]
+                    except OSError:
+                        continue
+        return rows[0]["worktree_id"]

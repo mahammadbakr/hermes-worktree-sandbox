@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-label="Worktree Sandbox for Hermes Agent">
+  <rect width="1200" height="600" fill="#0f1115"/>
+  <g fill="none" stroke="#2a2f3a" stroke-width="2">
+    <rect x="40" y="40" width="1120" height="520" rx="20"/>
+  </g>
+  <text x="80" y="130" fill="#f2f4f8" font-family="Helvetica, Arial, sans-serif" font-size="52" font-weight="700">Worktree Sandbox</text>
+  <text x="80" y="176" fill="#9aa4b2" font-family="Helvetica, Arial, sans-serif" font-size="24">Transactional Git worktrees + a speculative race arena for Hermes Agent</text>
+
+  <g font-family="Helvetica, Arial, sans-serif">
+    <rect x="80" y="232" width="300" height="120" rx="12" fill="#161a22" stroke="#3f6f5f" stroke-width="2"/>
+    <text x="104" y="268" fill="#8fd6b4" font-size="20" font-weight="700">Your checkout</text>
+    <text x="104" y="300" fill="#9aa4b2" font-size="16">untouched · git status clean</text>
+    <text x="104" y="328" fill="#9aa4b2" font-size="16">until you press Promote</text>
+
+    <rect x="450" y="232" width="300" height="120" rx="12" fill="#161a22" stroke="#3a4a6a" stroke-width="2"/>
+    <text x="474" y="268" fill="#9dc0f0" font-size="20" font-weight="700">Isolated worktree</text>
+    <text x="474" y="300" fill="#9aa4b2" font-size="16">terminal · execute_code ·</text>
+    <text x="474" y="328" fill="#9aa4b2" font-size="16">read/write/patch/search</text>
+
+    <rect x="820" y="232" width="300" height="120" rx="12" fill="#161a22" stroke="#6a4a6a" stroke-width="2"/>
+    <text x="844" y="268" fill="#e0a9e0" font-size="20" font-weight="700">Race arena</text>
+    <text x="844" y="300" fill="#9aa4b2" font-size="16">2-5 candidates in parallel,</text>
+    <text x="844" y="328" fill="#9aa4b2" font-size="16">verified and scored</text>
+  </g>
+
+  <g stroke="#4a5261" stroke-width="2" fill="none">
+    <path d="M380 292 H450"/>
+    <path d="M750 292 H820"/>
+  </g>
+
+  <text x="80" y="430" fill="#6f7787" font-family="Helvetica, Arial, sans-serif" font-size="18">hermes plugins install worktree-sandbox --enable   ·   /sandbox demo   ·   hermes worktree status</text>
+  <text x="80" y="470" fill="#6f7787" font-family="Helvetica, Arial, sans-serif" font-size="18">No network calls · no API keys · macOS + Linux · works offline</text>
+  <text x="80" y="520" fill="#4a5261" font-family="Helvetica, Arial, sans-serif" font-size="14">Illustration, not a screenshot — the demo video shows the real Desktop pane.</text>
+</svg>

@@ -41,6 +41,42 @@ def _session_workspace(args: dict[str, Any]) -> str:
         return os.getcwd()
 
 
+def _type_error(key: str, value: Any, expected: str) -> str:
+    return f"{key} must be {expected}, got {type(value).__name__}"
+
+
+def _check_optional_str(args: dict[str, Any], key: str) -> str | None:
+    """None when *key* is absent/empty or a string; the error message otherwise."""
+    value = args.get(key)
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    if isinstance(value, str):
+        return None
+    return _type_error(key, value, "a string")
+
+
+def _check_optional_bool(args: dict[str, Any], key: str) -> str | None:
+    value = args.get(key)
+    if value is None or isinstance(value, bool):
+        return None
+    return _type_error(key, value, "true or false")
+
+
+def _check_optional_int(args: dict[str, Any], key: str) -> str | None:
+    value = args.get(key)
+    if value is None or (isinstance(value, int) and not isinstance(value, bool)):
+        return None
+    return _type_error(key, value, "an integer")
+
+
+def _check_files_list(value: Any) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+        return "files must be an array of non-empty repo-relative paths"
+    return None
+
+
 class WorktreeTools:
     """Bundles the manager + ledger behind the worktree tool handlers."""
 
@@ -53,6 +89,10 @@ class WorktreeTools:
 
     def worktree_create(self, args: dict[str, Any], **kwargs: Any) -> str:
         try:
+            for key in ("workspace", "task_id", "base"):
+                problem = _check_optional_str(args, key)
+                if problem:
+                    return _err(problem)
             workspace = _session_workspace(args)
             task_id = str(args.get("task_id") or kwargs.get("task_id") or "default")
             base = args.get("base") or None
@@ -70,6 +110,14 @@ class WorktreeTools:
 
     def worktree_status(self, args: dict[str, Any], **kwargs: Any) -> str:
         try:
+            for key in ("workspace", "worktree_id"):
+                problem = _check_optional_str(args, key)
+                if problem:
+                    return _err(problem)
+            problem = _check_optional_bool(args, "include_inactive")
+            if problem:
+                return _err(problem)
+
             worktree_id = args.get("worktree_id")
             if isinstance(worktree_id, str) and worktree_id.strip():
                 return _ok(**self.manager.status(worktree_id.strip()))
@@ -110,13 +158,21 @@ class WorktreeTools:
 
     def worktree_promote(self, args: dict[str, Any], **kwargs: Any) -> str:
         try:
+            problem = _check_optional_str(args, "worktree_id")
+            if problem:
+                return _err(problem)
+            problem = _check_optional_bool(args, "force")
+            if problem:
+                return _err(problem)
+            problem = _check_files_list(args.get("files"))
+            if problem:
+                return _err(problem)
+
             worktree_id = str(args.get("worktree_id") or "").strip()
             if not worktree_id:
                 return _err("worktree_promote requires a worktree_id")
             force = bool(args.get("force", False))
             files = args.get("files")
-            if files is not None and not isinstance(files, list):
-                return _err("files must be an array of repo-relative paths")
             result = self.manager.promote(worktree_id, force=force, files=files)
             _emit("promoted", {
                 "worktree_id": worktree_id,
@@ -143,9 +199,19 @@ class WorktreeTools:
             candidates = args.get("candidates")
             if not isinstance(candidates, list):
                 return _err("worktree_race requires a 'candidates' array of at least two entries")
+            for key in ("workspace", "verify_command"):
+                problem = _check_optional_str(args, key)
+                if problem:
+                    return _err(problem)
+            for key in ("promote_winner", "keep_worktrees"):
+                problem = _check_optional_bool(args, key)
+                if problem:
+                    return _err(problem)
+            problem = _check_optional_int(args, "timeout")
+            if problem:
+                return _err(problem)
+
             verify_command = args.get("verify_command")
-            if verify_command is not None and not isinstance(verify_command, str):
-                return _err("verify_command must be a string")
             timeout = args.get("timeout", 120)
             result = self.racer.race(
                 _session_workspace(args), candidates,
