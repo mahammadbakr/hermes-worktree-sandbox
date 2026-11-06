@@ -118,11 +118,11 @@ def test_demo_race_is_offline_and_deterministic(runner: RaceRunner) -> None:
     result = run_demo_race(runner.manager)
     assert result["ok"] is True
     labels = {row["label"] for row in result["results"]}
-    assert labels == {"quick-split", "careful"}
+    assert labels == {"trim-only", "careful"}
     # The arena must find the candidate that actually passes the test suite.
     by_label = {row["label"]: row for row in result["results"]}
     assert by_label["careful"]["passed"] is True
-    assert by_label["quick-split"]["passed"] is False
+    assert by_label["trim-only"]["passed"] is False
     assert result["winner"] == "careful"
     assert result["verify_command"].endswith("-m unittest -q test_parser")
 

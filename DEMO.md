@@ -1,42 +1,188 @@
-# 90-Second Demo Video Script (`DEMO.md`)
+# Demo video package — `worktree-sandbox`
 
-> **Target Duration:** 75 seconds (strictly under the 90-second limit)  
-> **Post Target:** X (Twitter), tagging `@NousResearch`  
-> **Setup Before Recording:**
-> 1. Run `hermes worktree demo --reset` (or click **Seed Demo Arena** in the Hermes Desktop Worktree Sandbox pane) to initialize a clean sample repository with a slow parser implementation and unit test suite.
-> 2. Open Hermes Desktop with the **Worktree Sandbox** right pane docked and visible alongside the chat transcript, and a small terminal showing `git status` in the main workspace.
+**Target: 75 seconds** (hard limit 90). One idea: *the agent works in a throwaway copy of your
+project, and it proves which of two fixes is actually correct before touching your files.*
+
+Post on X, tag `@NousResearch`, and put the link in the entry form.
 
 ---
 
-## Second-by-Second Script
+## 1. What the viewer must remember
 
-### 0:00 – 0:12 | The Problem & The Hook (12s)
-- **Visual:** Split screen: Hermes Desktop on the left, terminal showing `git status` (`nothing to commit, working tree clean`) on the right. Highlight the `worktree: clean` chip in the Hermes Desktop status bar.
-- **Voiceover:** *"When coding agents edit files or run shell commands, they mutate your working tree in place—and if you spawn parallel subagents, they overwrite each other's files. Meet **Worktree Sandbox**: a transactional Git-worktree terminal backend and speculative execution arena for Hermes Agent."*
+1. The agent edits and runs commands while `git status` on the real checkout stays clean.
+2. Two plausible fixes are raced **in parallel**, verified by the project's own tests, and one **fails**.
+3. One click promotes the winner; a backup is written; the diff is exactly what it should be.
 
-### 0:12 – 0:30 | Transactional Isolation in Action (18s)
-- **Visual:** Type in Hermes Desktop composer:  
-  `Refactor parser.py to add strict header validation and run pytest.`
-- **Action:** Hermes calls `write_file` and `terminal` (`pytest -q`).
-- **What the viewer sees ("Wow" #1):**
-  - The status bar chip live-updates to `🌿 wt-session (+28 / -6) · 4 passed`.
-  - The right-hand **Worktree Sandbox** pane updates automatically via `broadcast_plugin_event`, showing the unified diff of `parser.py` inside the isolated worktree.
-  - In the terminal on the right, run `git status` on the main checkout: **it is still 100% clean and untouched!**
-- **Voiceover:** *"Because Worktree Sandbox implements Hermes's `TerminalEnvironmentProvider` with `uses_host_filesystem = False`, every file edit and shell command runs inside an isolated Git worktree with secrets stripped—leaving our main checkout completely untouched."*
+---
 
-### 0:30 – 0:58 | Speculative Multi-Branch Arena (`/sandbox race`) (28s)
-- **Visual:** Type `/sandbox demo` (or click **"Run Speculative Race"** in the Desktop pane / ask Hermes to call `worktree_race` with two candidate optimizations: **Candidate A: Precompiled Regex** vs **Candidate B: Single-Pass State Machine**).
-- **What the viewer sees ("Wow" #2):**
-  - Two isolated Git worktrees spin up in parallel (`wt-...-quick-split` and `wt-...-careful`).
-  - Both run the project's own test suite, in parallel, inside their own worktree.
-  - The leaderboard prints in chat:
-    - **Candidate A (`quick-split`):** `FAIL · 4 tests failed · score 186.6`
-    - **Candidate B (`careful`):** `🏆 WINNER · PASS · 12 tests, 0 failures · score 1190.35`
-- **Voiceover:** *"Instead of guessing one approach, we race competing solutions in parallel worktrees. Worktree Sandbox runs the project's own test suite against each candidate, scores them on pass/fail, speed and diff size, and promotes the winner — the arena found the implementation that actually works."*
+## 2. Pre-flight (do this once)
 
-### 0:58 – 1:15 | One-Click Promotion & Clean Rollback (17s)
-- **Visual:**
-  - Click **"Promote Winner"** on Candidate B in the Desktop pane (or `/sandbox promote <id>`).
-  - Toast notification appears: `Promoted wt-...-careful: 1 applied, 0 deleted. backup: ...`
-  - Run `git status` and `git diff` in the main terminal: the winning changes are now cleanly applied to the main repo!
-- **Voiceover:** *"With one click—or `/sandbox promote` from Telegram, CLI, or Desktop—the winning diff is conflict-checked, backed up, and applied to our main workspace. Zero Docker overhead, works offline on macOS and Linux. Install `worktree-sandbox` from the Hermes Marketplace today."*
+```bash
+# 1. A checkout to record against
+cd <your clone of hermes-worktree-sandbox>
+
+# 2. Seed the recording workspace (creates a demo project whose parser fails 4 of 7 tests
+#    and races two candidate fixes, keeping both worktrees so the Desktop pane has content)
+HERMES_AGENT_REPO=/path/to/hermes-agent PYTHON=/path/to/hermes/venv/bin/python \
+  bash scripts/demo_seed.sh --reset
+
+# It prints:
+#   DEMO_PROJECT=/Users/you/.hermes/plugin-data/worktree-sandbox/demo/<stamp>
+#   DEMO_RACE=race-...  WINNER=careful
+#     careful      PASS    95 ms  wt-race-...-1-careful-cbc130
+#     trim-only    FAIL   113 ms  wt-race-...-0-trim-only-cbc130
+```
+
+Then in Hermes:
+
+```bash
+hermes plugins install mahammadbakr/hermes-worktree-sandbox#plugin --enable   # or the catalog name
+hermes config set terminal.backend worktree
+# open the seeded project as the workspace
+hermes desktop            # or: hermes chat   (both work; Desktop shows the pane)
+```
+
+In Desktop: right-click the workspace → dock the **worktrees** pane on the right
+(it may already be there), and open a terminal panel in `DEMO_PROJECT`.
+
+**Reset between takes:**
+
+```bash
+bash scripts/demo_seed.sh --reset         # wipes seeded projects, re-seeds one
+/sandbox prune 0                          # remove leftover worktrees
+```
+
+---
+
+## 3. Second-by-second script
+
+### 0:00 – 0:06 · Hook
+- **Shot:** Desktop window, **worktrees** pane visible on the right, terminal showing
+  `cd "$DEMO_PROJECT" && git status --short` → **empty**.
+- **Caption (big, top):** `Your agent edits. Your checkout doesn't.`
+- **Voice:** "This is a coding agent that cannot touch your real files until you say so."
+
+### 0:06 – 0:14 · The problem
+- **Shot:** terminal — `python -m unittest -q test_parser` → `FAILED (failures=4)`.
+- **Caption:** `4 failing tests. Two plausible fixes. Which one is right?`
+- **Voice:** "The parser is broken. I could guess — or I could measure."
+
+### 0:14 – 0:32 · Isolation, live
+- **Shot:** Desktop composer. Type:
+  > `Fix parser.py so all the tests pass. Keep my checkout untouched and tell me what's pending.`
+- **Shot:** the agent edits `parser.py`; the pane’s `+added/-deleted` numbers tick up (driven by the
+  `post_tool_call` hook, not polling); `python -m unittest -q` runs **inside the worktree** and passes.
+- **Shot:** terminal — `git status --short` again: **still empty**.
+- **Caption:** `terminal + every file tool + all tests ran in an isolated Git worktree`
+- **Voice:** "Every command and every edit went into an isolated Git worktree — the real checkout is
+  untouched, so I can review this, keep it, or throw it away."
+
+### 0:32 – 0:58 · The arena (the payoff)
+- **Shot:** composer. Type:
+  > `Race two fixes for the parser: one that only trims whitespace, and one that also normalises key
+  > case. Use the project's own tests to verify. Don't apply anything yet.`
+- **Shot:** two worktrees appear in the pane in parallel; the leaderboard prints in the chat:
+  ```
+  1. careful      PASS    95 ms  +12/-7 in 1 file(s)  score 1188.15
+  2. trim-only    FAIL   113 ms  +11/-7 in 1 file(s)  score 186.80
+  ```
+- **Shot:** zoom on `trim-only FAIL` — the *wrong* fix, caught before it ever reached the repo.
+- **Caption:** `Same tests, same moment. The arena caught the wrong fix.`
+- **Voice:** "Both fixes ran at once, each in its own worktree, verified by the project's own test
+  suite. The obvious tidy-up fails — and it never touched my project."
+
+> **Deterministic fallback (if the live model is slow — same visuals, instant):**
+> type `/sandbox demo` instead. It seeds its own project and prints the same kind of leaderboard
+> with zero model latency, no network and no API key.
+
+### 0:58 – 1:10 · Promote the winner
+- **Shot:** click **Promote** on the `careful` worktree in the pane → toast:
+  `Promoted wt-…-careful: 1 file(s) into your checkout.`
+- **Shot:** terminal — `git diff --stat` → one file changed; `ls` → nothing else appeared.
+- **Caption:** `Promoted 1 file · backup written · nothing else changed`
+- **Voice:** "One click promotes the winner — conflict-checked, and backed up first. The loser is
+  discarded; my history is untouched."
+
+### 1:10 – 1:15 · Call to action
+- **Shot:** the pane with the remaining worktree, then the repo URL on screen.
+- **Caption:** `hermes plugins install worktree-sandbox`
+- **Voice:** "Worktree Sandbox — install it from the Hermes plugin catalog. No Docker, no API keys,
+  works offline on macOS and Linux."
+
+---
+
+## 4. On-screen captions (muted viewing)
+
+Show these as large text overlays, one per beat:
+
+| Time | Caption |
+|---|---|
+| 0:00 | `Your agent edits. Your checkout doesn't.` |
+| 0:08 | `4 failing tests` |
+| 0:16 | `Commands + edits + tests → isolated Git worktree` |
+| 0:24 | `git status: still clean` |
+| 0:34 | `Race two fixes, in parallel` |
+| 0:44 | `Verified by the project's own tests` |
+| 0:50 | `the obvious fix FAILS` |
+| 1:00 | `Promote the winner → 1 file, backup written` |
+| 1:12 | `hermes plugins install worktree-sandbox` |
+
+---
+
+## 5. Shot list
+
+| # | Shot | Source | Notes |
+|---|---|---|---|
+| 1 | Clean checkout + pane idle | Desktop + terminal | Establish the panel layout |
+| 2 | `python -m unittest -q` failing | terminal | Crop tight on `FAILED (failures=4)` |
+| 3 | Prompt typed + agent edit | Desktop composer | Type it live; do not paste — reads better |
+| 4 | Pane numbers changing | Desktop pane | The only "live" moment; hold ~2 s |
+| 5 | `git status --short` empty | terminal | The core claim — hold 2 s |
+| 6 | Race prompt → leaderboard | Desktop | Zoom the leaderboard |
+| 7 | Pane with 2 parallel worktrees | Desktop pane | Shows the parallel worktrees |
+| 8 | Promote click + toast | Desktop pane | Show the backup path in the toast if visible |
+| 9 | `git diff --stat` | terminal | Proves exactly one file changed |
+| 10 | URL + install line | static card | 3 s closing |
+
+---
+
+## 6. Recording checklist
+
+- [ ] Display at 1920×1080 (or 2560×1440), scale so terminal text is ≥ 16 px on screen
+- [ ] One window: Desktop with the **worktrees** pane docked right and a terminal panel below
+- [ ] Font size in the terminal and composer bumped (⌘+ twice)
+- [ ] Do Not Disturb on; Slack/mail/notifications off; quit menu-bar clutter
+- [ ] Close unrelated browser tabs and any second monitor
+- [ ] `DEMO_PROJECT` open as the workspace; `/sandbox prune 0` so the pane starts empty
+- [ ] Theme: dark (the pane chip and captions read better); hide the session list if it is noisy
+- [ ] Run one **throwaway take** end-to-end before the real one
+- [ ] Record at 60 fps; keep the raw file for a re-cut
+- [ ] Check audio: the voiceover must be legible over the keystrokes
+- [ ] Final export ≤ 90 s, ≤ 512 MB, H.264 + AAC, 1080p
+- [ ] Watch it **muted** once — the captions alone must tell the story
+- [ ] Watch it **at 0.25×** to check no secret, path or token is on screen
+- [ ] Backup take recorded with the `/sandbox demo` fallback
+
+---
+
+## 7. Post-production
+
+- Trim dead air between beats (typically 8–12 s) rather than speeding anything up — the pane updates
+  and the race are the interesting motion.
+- Add a subtle zoom on: the `FAILED (failures=4)` line, the `trim-only FAIL` row, and the promote toast.
+- Keep the terminal font large enough that a phone viewer can read `git status` output.
+- Do **not** add music louder than the voice; the keystrokes carry the pace.
+- End card: plugin name, `hermes plugins install worktree-sandbox`, `@NousResearch`.
+
+---
+
+## 8. If something breaks mid-recording
+
+| Symptom | Recovery |
+|---|---|
+| Pane is empty | The gateway restarted: `hermes plugins enable worktree-sandbox`, then reload the Desktop window |
+| Pane says "backend is not reachable" | The plugin is not enabled, or `plugins.isolation: host` — see README → Troubleshooting |
+| Pane is stale | Click **Refresh** in the pane header, or `⌘K → Reload desktop plugins` |
+| Worktrees piled up from earlier takes | `/sandbox prune 0` then re-run `scripts/demo_seed.sh --reset` |
+| The model is slow / refuses | Switch to the `/sandbox demo` fallback take (fully offline, identical UI) |
+| Promote refuses with a conflict | That is the feature working: click **Force** (a backup is still written) or re-seed |

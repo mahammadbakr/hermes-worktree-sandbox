@@ -261,18 +261,16 @@ class RaceRunner:
 # Demo seed — a self-contained, offline race used by `/worktree demo`
 # --------------------------------------------------------------------------- #
 
-_DEMO_BASE_PARSER = '''"""Tiny header parser (baseline)."""
+_DEMO_BASE_PARSER = '''"""Tiny header parser (the version with a bug to fix)."""
 
 
 def parse_header(line):
-    """Return a dict of key=value pairs from a `X-Name: v1; v2` header line."""
     items = {}
     for part in line.split(";"):
-        part = part.strip()
-        if not part or "=" not in part:
+        if "=" not in part:
             continue
-        key, _, value = part.partition("=")
-        items[key.strip().lower()] = value.strip()
+        key, value = part.split("=", 1)
+        items[key] = value
     return items
 '''
 
@@ -308,23 +306,23 @@ class ThroughputTests(unittest.TestCase):
             parse_header("alpha=1; beta=2; gamma=3")
 '''
 
-# Candidate A: the obvious first attempt. It does not trim whitespace, does not normalise
-# key case, and drops any value that itself contains "=" — so it fails the test suite.
-_DEMO_NAIVE = '''"""Candidate A: quick split-based parser (gets the easy cases only)."""
+# Candidate A: the obvious tidy-up. Trims keys and skips junk, but never normalises key case.
+_DEMO_TRIM_ONLY = '''"""Candidate A: trims and skips noise, but keeps key case as written."""
 
 
 def parse_header(line):
     items = {}
     for part in line.split(";"):
-        if "=" not in part:
+        part = part.strip()
+        if not part or "=" not in part:
             continue
         key, value = part.split("=", 1)
-        items[key] = value
+        items[key.strip()] = value
     return items
 '''
 
-# Candidate B: trims, lower-cases keys, tolerates noise and keeps "=" inside values.
-_DEMO_STRICT = '''"""Candidate B: careful parser that normalses keys and tolerates noise."""
+# Candidate B: also normalises key case and trims values, so every test passes.
+_DEMO_CAREFUL = '''"""Candidate B: trims, drops noise, normalises key case and keeps "=" in values."""
 
 
 def parse_header(line):
@@ -350,8 +348,8 @@ def seed_demo_project(root: Path) -> Path:
 
 def demo_candidates() -> list[dict[str, Any]]:
     return [
-        {"label": "quick-split", "files": {"parser.py": _DEMO_NAIVE}},
-        {"label": "careful", "files": {"parser.py": _DEMO_STRICT}},
+        {"label": "trim-only", "files": {"parser.py": _DEMO_TRIM_ONLY}},
+        {"label": "careful", "files": {"parser.py": _DEMO_CAREFUL}},
     ]
 
 
@@ -371,11 +369,13 @@ def run_demo_race(manager: WorktreeManager, *, keep_worktrees: bool = False, kee
     project = seed_demo_project(demo_root)
     _trim_demo_projects(manager, keep=keep_projects)
     runner = RaceRunner(manager)
-    return runner.race(
+    result = runner.race(
         str(project), demo_candidates(),
         verify_command=demo_verify_command(), timeout=120,
         keep_worktrees=keep_worktrees, label="demo",
     )
+    result["project"] = str(project)
+    return result
 
 
 def _trim_demo_projects(manager: WorktreeManager, *, keep: int) -> int:

@@ -124,8 +124,15 @@ class WorktreeCommands:
             )
         lines.append("")
         lines.append(f"  winner: {result['winner']}")
-        lines.append("  Promote it with /sandbox promote <id> once you decide "
-                     "(or call worktree_race with promote_winner=true).")
+        keep_note = ""
+        if keep:
+            for row in result["results"]:
+                lines.append(f"  worktree {row['worktree_id']} ({row['label']})")
+            keep_note = " Promote or discard them from the Desktop pane or with /sandbox promote <id>."
+        lines.append(f"  demo project: {result.get('project', '(unknown)')}")
+        lines.append(
+            "  Open that folder in Hermes to keep experimenting; the race itself needs no model, "
+            "no network and no API key." + keep_note)
         return "\n".join(lines)
 
     # -- dispatch ----------------------------------------------------------------

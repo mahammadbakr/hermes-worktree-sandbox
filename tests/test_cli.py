@@ -60,7 +60,7 @@ def test_demo_command_reports_leaderboard(manager) -> None:
     text = _commands(manager).demo()
     assert "Demo race complete" in text
     assert "careful" in text
-    assert "quick-split" in text
+    assert "trim-only" in text
     assert "winner: careful" in text
 
 
