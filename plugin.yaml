@@ -1,0 +1,59 @@
+name: worktree-sandbox
+label: Worktree Sandbox
+version: "0.1.0"
+manifest_version: 2
+api_version: 1
+kind: standalone
+author: mahammadbakr
+license: MIT
+homepage: https://github.com/mahammadbakr/hermes-worktree-sandbox
+description: >-
+  Transactional Git-worktree terminal backend and speculative execution arena:
+  runs commands and file edits in isolated Git worktrees with secret masking,
+  parallel candidate racing, and one-click diff promotion in Hermes Desktop.
+requires_hermes: ">=0.22.5"
+platforms:
+  - linux
+  - macos
+tags:
+  - terminal
+  - sandbox
+  - worktree
+  - git
+  - desktop
+provides_tools:
+  - worktree_create
+  - worktree_status
+  - worktree_diff
+  - worktree_promote
+  - worktree_race
+provides_hooks:
+  - on_session_start
+  - post_tool_call
+  - pre_verify
+  - on_session_finalize
+provides_middleware: []
+requires_env: []
+capabilities: []
+python_dependencies: []
+config_schema:
+  auto_isolate:
+    type: bool
+    default: true
+    label: Auto-isolate sessions
+    description: Automatically create an isolated Git worktree for each task when terminal.backend is worktree.
+  keep_on_exit:
+    type: bool
+    default: true
+    label: Keep worktrees after session ends
+    description: Retain worktrees with uncommitted or unpromoted changes after session teardown for review in Desktop.
+  verify_command:
+    type: str
+    default: ""
+    label: Default verification command
+    description: Optional shell command (e.g. pytest -q) run during worktree_race or pre_verify checks.
+  max_worktrees:
+    type: int
+    default: 20
+    label: Maximum retained worktrees
+    description: Maximum number of managed worktrees before oldest clean worktrees are pruned.
