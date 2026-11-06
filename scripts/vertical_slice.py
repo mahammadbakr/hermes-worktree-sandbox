@@ -91,8 +91,9 @@ def main() -> int:
     discover_builtin_tools()
     tool_names = sorted(n for n in registry.get_all_tool_names() if n.startswith("worktree"))
     print("  worktree tools:", tool_names)
-    if len(tool_names) != 4:
-        print("FAIL: expected 4 worktree tools")
+    expected = {"worktree_create", "worktree_status", "worktree_diff", "worktree_promote", "worktree_race"}
+    if set(tool_names) != expected:
+        print(f"FAIL: expected {sorted(expected)}")
         return 1
 
     def dispatch(name: str, args: dict) -> dict:
@@ -143,6 +144,46 @@ def main() -> int:
 
     if "slice" not in final_app or not (project / "sliced.txt").exists():
         print("FAIL: promotion did not land")
+        return 1
+
+    _banner("5. worktree_race — parallel candidates scored by a verify command")
+    race = dispatch("worktree_race", {
+        "workspace": str(project),
+        "candidates": [
+            {"label": "reuse-app", "files": {"race_a.txt": "alpha\n"}},
+            {"label": "bad-candidate", "files": {"race_b.txt": "beta\n"}},
+        ],
+        "verify_command": "test -f race_a.txt",
+        "promote_winner": True,
+    })
+    for row in race.get("results", []):
+        print(f"    {row['label']:<14} passed={row['passed']} "
+              f"score={row['score']} +{row['added']}/-{row['deleted']}")
+    print("  winner:", race.get("winner"), "| promoted:", bool(race.get("promoted")))
+    if race.get("winner") != "reuse-app" or not (project / "race_a.txt").exists():
+        print("FAIL: race did not pick and promote the passing candidate")
+        return 1
+
+    _banner("6. Slash command + CLI surfaces registered")
+    manager_commands = hp.get_plugin_commands()
+    print("  plugin slash commands:", sorted(manager_commands))
+    cli = manager._cli_commands
+    print("  plugin CLI commands:", sorted(cli))
+    if "sandbox" not in manager_commands or "worktree" not in cli:
+        print("FAIL: /sandbox or `hermes worktree` was not registered")
+        return 1
+
+    slash = manager_commands["sandbox"]["handler"]
+    print("  /sandbox demo →")
+    for line in slash("demo").splitlines():
+        print("    " + line)
+
+    _banner("7. Lifecycle hooks registered")
+    for hook in ("on_session_start", "post_tool_call", "pre_verify", "on_session_finalize"):
+        print(f"  {hook}: {manager.has_hook(hook)}")
+    if not all(manager.has_hook(h) for h in
+               ("on_session_start", "post_tool_call", "pre_verify", "on_session_finalize")):
+        print("FAIL: lifecycle hooks were not registered")
         return 1
 
     _banner("RESULT: vertical slice PASSED")

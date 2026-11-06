@@ -20,3 +20,25 @@ All notable changes to `hermes-worktree-sandbox` (`worktree-sandbox`) are docume
 - `scripts/vertical_slice.py`: end-to-end proof that runs the plugin inside a real Hermes
   `PluginManager` and drives the real `terminal` + `worktree_*` tools.
 - 103 unit and integration tests, including real `hermes_cli.plugin_validate` admission checks.
+
+### Milestone 2 — race arena, hooks and commands
+
+- **`worktree_race`**: run 2–5 competing solutions in parallel isolated worktrees, verify each with
+  a command (hard timeout, process-group kill), score on pass/fail + speed + diff size, and
+  optionally promote the winner. Git mutations are serialized so parallel candidates cannot
+  collide on `git worktree add`.
+- **Built-in offline demo** (`/sandbox demo`, `hermes worktree demo`): seeds a self-contained
+  project and races a failing `quick-split` parser against a passing `careful` parser — no network,
+  no model call, no API key.
+- **Shadow-Git fallback**: a folder that is not a Git repository is mirrored into a private shadow
+  repo (credentials, binaries and dependency dirs excluded) so isolation works with zero setup;
+  promotion always writes back into the real folder.
+- **Lifecycle hooks**: `on_session_start`, `post_tool_call` (throttled live diff stats + Desktop
+  events), `pre_verify` (optional `verify_command` gate that keeps the agent working when
+  verification fails), `on_session_finalize` (bounded prune).
+- **`/sandbox` slash command** and **`hermes worktree` CLI** sharing one verb dispatcher
+  (`status|list|diff|promote|discard|prune|demo`), with an interactive worktree picker where one is
+  available and a clean usage hint when nobody can answer.
+- Build artifacts and credential-shaped files are now excluded from change reports, diffs and
+  promotion (consistent with the shadow mirror).
+- 45 more tests (148 total) covering the race arena, shadow repos, hooks and commands.

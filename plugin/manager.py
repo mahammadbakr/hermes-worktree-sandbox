@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 from collections.abc import Iterable
 from pathlib import Path
@@ -29,12 +30,19 @@ from typing import Any
 from .security import (
     is_safe_relative_path,
     sanitize_env,
+    should_skip_path,
     validate_worktree_id,
 )
 from .storage import PLUGIN_NAME, Ledger
 
 _GIT_TIMEOUT = 30
 _MAX_DIFF_BYTES = 200_000
+
+# Git's `worktree add`, `branch -D` and `worktree prune` mutate shared state in the repository
+# (and `git init` for a shadow repo), so they must not run concurrently: parallel race candidates
+# would otherwise collide on `.git/worktrees` and on the shadow repo's first `git init`.
+# Only creation/teardown is serialized — candidate *execution* (the slow part) still runs in parallel.
+_GIT_MUTATION_LOCK = threading.RLock()
 
 
 class WorktreeError(RuntimeError):
@@ -89,6 +97,10 @@ class WorktreeManager:
     @property
     def backups_root(self) -> Path:
         return self._subdir("backups")
+
+    @property
+    def shadow_root(self) -> Path:
+        return self._subdir("shadow-repos")
 
     # -- git plumbing ------------------------------------------------------------
 
@@ -146,16 +158,40 @@ class WorktreeManager:
             raise WorktreeError(f"workspace is not a directory: {path}")
         return path
 
-    def resolve_workspace(self, workspace: str | None) -> Path:
-        """Return the Git repo root for *workspace*, raising a clear ``WorktreeError`` otherwise."""
+    def _resolve_repo(self, workspace: str | None) -> tuple[Path, Path, bool]:
+        """Return ``(repo_root, promote_target, shadow)``.
+
+        ``repo_root`` is the Git repository worktrees branch from (the workspace's own repo, or a
+        private shadow repo we create). ``promote_target`` is the directory changes are written
+        back to — the user's real folder in both cases.
+        """
         start = self._normalize_workspace(workspace)
         repo = self.find_repo_root(start)
-        if repo is None:
+        if repo is not None:
+            return repo, repo, False
+        from .shadow import ShadowRepoError, sync_shadow_repo
+
+        try:
+            repo, _count = sync_shadow_repo(self.shadow_root, start)
+        except ShadowRepoError as exc:
             raise WorktreeError(
-                f"{start} is not inside a Git repository. Run `git init` (and make an initial commit) "
-                "in the project, or point the tool at a Git workspace."
-            )
-        return repo
+                f"{start} is not a Git repository and a shadow repository could not be created: {exc}. "
+                "Run `git init` (and make a commit) in the project, or fix Git and retry."
+            ) from exc
+        return repo, start, True
+
+    def resolve_workspace(self, workspace: str | None) -> Path:
+        """Return the directory a worktree's changes are promoted into (repo root, or the folder)."""
+        _repo_root, target, _shadow = self._resolve_repo(workspace)
+        return target
+
+    def peek_workspace(self, workspace: str | None) -> Path:
+        """Like :meth:`resolve_workspace` but side-effect free (never creates a shadow repo).
+
+        Read-only callers (``worktree_status``) must not materialize a shadow repo just to list.
+        """
+        start = self._normalize_workspace(workspace)
+        return self.find_repo_root(start) or start
 
     # -- identifiers -------------------------------------------------------------
 
@@ -172,8 +208,14 @@ class WorktreeManager:
         self, workspace: str | None, task_id: str = "default", *,
         base: str | None = None, reuse: bool = True,
     ) -> dict[str, Any]:
-        repo_root = self.resolve_workspace(workspace)
-        worktree_id = self._make_id(task_id, repo_root)
+        with _GIT_MUTATION_LOCK:
+            return self._create_worktree(workspace, task_id, base=base, reuse=reuse)
+
+    def _create_worktree(
+        self, workspace: str | None, task_id: str, *, base: str | None, reuse: bool,
+    ) -> dict[str, Any]:
+        repo_root, target, shadow = self._resolve_repo(workspace)
+        worktree_id = self._make_id(task_id, target)
 
         if reuse:
             existing = self._ledger.get_worktree(worktree_id)
@@ -199,10 +241,11 @@ class WorktreeManager:
         self._git(["worktree", "add", "-b", branch, "--force", str(wt_path), base_commit], repo_root, check=True)
 
         self._ledger.upsert_worktree(
-            worktree_id=worktree_id, workspace=str(repo_root), path=str(wt_path), branch=branch,
-            base_commit=base_commit, shadow=False, state="active",
+            worktree_id=worktree_id, workspace=str(target), path=str(wt_path), branch=branch,
+            base_commit=base_commit, shadow=shadow, state="active", repo_root=str(repo_root),
         )
-        self._ledger.record_event(worktree_id, "created", {"base_commit": base_commit, "branch": branch})
+        self._ledger.record_event(
+            worktree_id, "created", {"base_commit": base_commit, "branch": branch, "shadow": shadow})
         record = self._ledger.get_worktree(worktree_id)
         assert record is not None
         return self._describe(record)
@@ -258,6 +301,10 @@ class WorktreeManager:
             if " -> " in raw_path:  # rename / copy
                 raw_path = raw_path.split(" -> ", 1)[1]
             path = raw_path.strip().strip('"')
+            if should_skip_path(path):
+                # Build artifacts and credential-shaped files are never reported, diffed or
+                # promoted (consistent with what the shadow mirror excludes).
+                continue
             added, deleted, binary = stats.get(path, (0, 0, False))
             changes.append({
                 "path": path, "status": _status_label(code),
@@ -322,11 +369,12 @@ class WorktreeManager:
     ) -> dict[str, Any]:
         record = self._require(worktree_id)
         wt_path = Path(record["path"])
-        repo = Path(record["workspace"])
+        repo = Path(record.get("repo_root") or record["workspace"])
+        target = Path(record["workspace"])
         if not wt_path.is_dir():
             raise WorktreeError(f"worktree directory is missing: {wt_path}")
-        if not repo.is_dir():
-            raise WorktreeError(f"target workspace is missing: {repo}")
+        if not target.is_dir():
+            raise WorktreeError(f"target workspace is missing: {target}")
 
         wanted = {f for f in (files or []) if f}
         changes = self._collect_changes(wt_path)
@@ -347,7 +395,7 @@ class WorktreeManager:
                 continue
 
             base_content = self._git_show_bytes(repo, record.get("base_commit"), rel)
-            host_path = repo / rel
+            host_path = target / rel
             host_content = host_path.read_bytes() if host_path.is_file() else None
             src_path = wt_path / rel
             wt_content = src_path.read_bytes() if src_path.is_file() else None
@@ -423,9 +471,13 @@ class WorktreeManager:
         return described
 
     def discard(self, worktree_id: str) -> dict[str, Any]:
+        with _GIT_MUTATION_LOCK:
+            return self._discard(worktree_id)
+
+    def _discard(self, worktree_id: str) -> dict[str, Any]:
         record = self._require(worktree_id)
         wt_path = Path(record["path"])
-        repo = Path(record["workspace"])
+        repo = Path(record.get("repo_root") or record["workspace"])
         if repo.is_dir():
             self._git(["worktree", "remove", "--force", str(wt_path)], repo)
             self._git(["worktree", "prune"], repo)

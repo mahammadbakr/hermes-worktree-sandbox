@@ -151,14 +151,16 @@ def test_environment_maps_subdirectory_cwd(manager, git_repo: Path) -> None:
     assert str(Path(env.worktree_path)) in env.cwd
 
 
-def test_create_environment_non_git_raises(manager, tmp_path: Path) -> None:
-    from worktree_sandbox.manager import WorktreeError
-
+def test_create_environment_uses_shadow_repo_for_non_git(manager, tmp_path: Path) -> None:
     plain = tmp_path / "plain"
     plain.mkdir()
+    (plain / "main.py").write_text("VALUE = 1\n", encoding="utf-8")
     provider = _make_provider(manager)
-    with pytest.raises(WorktreeError, match="could not start"):
-        provider.create_environment(cwd=str(plain), timeout=30, task_id="bad")
+    env = provider.create_environment(cwd=str(plain), timeout=30, task_id="shadow")
+    assert (Path(env.worktree_path) / "main.py").read_text(encoding="utf-8") == "VALUE = 1\n"
+    result = env.execute("printf 'VALUE = 2\\n' > main.py")
+    assert result["returncode"] == 0
+    assert (plain / "main.py").read_text(encoding="utf-8") == "VALUE = 1\n"
 
 
 def test_prompt_note_mentions_isolation() -> None:
@@ -170,10 +172,10 @@ def test_prompt_note_mentions_isolation() -> None:
 
 
 def test_register_wires_surfaces() -> None:
-    """register() should register the provider, a prompt section and the 4 tools."""
+    """register() should register the provider, a prompt section, the tools, hooks and commands."""
     from worktree_sandbox import register
 
-    recorded = {"tools": [], "sections": [], "providers": []}
+    recorded = {"tools": [], "sections": [], "providers": [], "hooks": [], "commands": [], "cli": []}
 
     class Stub:
         def register_tool(self, name, **kwargs):
@@ -185,13 +187,29 @@ def test_register_wires_surfaces() -> None:
         def register_terminal_environment_provider(self, provider):
             recorded["providers"].append(provider.name)
 
+        def register_hook(self, hook_name, callback, **kwargs):
+            recorded["hooks"].append(hook_name)
+
+        def register_command(self, name, handler, **kwargs):
+            recorded["commands"].append(name)
+
+        def register_cli_command(self, name, help, setup_fn, handler_fn=None, **kwargs):
+            recorded["cli"].append(name)
+
         def get_config(self, key, default=None):
             return default
 
     register(Stub())
-    assert set(recorded["tools"]) == {"worktree_create", "worktree_status", "worktree_diff", "worktree_promote"}
+    assert set(recorded["tools"]) == {
+        "worktree_create", "worktree_status", "worktree_diff", "worktree_promote", "worktree_race",
+    }
     assert recorded["sections"] == ["worktree-sandbox"]
     assert recorded["providers"] == ["worktree"]
+    assert set(recorded["hooks"]) == {
+        "on_session_start", "post_tool_call", "pre_verify", "on_session_finalize",
+    }
+    assert recorded["commands"] == ["sandbox"]
+    assert recorded["cli"] == ["worktree"]
 
 
 @pytest.mark.skipif(os.environ.get("CI") == "true", reason="writes to the real HERMES_HOME")

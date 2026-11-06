@@ -46,6 +46,11 @@ CREATE TABLE IF NOT EXISTS races (
 );
 """
 
+# Columns added after the first release; `_migrate` adds any that are missing on an existing DB.
+_ADDED_COLUMNS = {
+    "worktrees": {"repo_root": "TEXT"},
+}
+
 
 def _now() -> float:
     return time.time()
@@ -87,9 +92,21 @@ class Ledger:
                 except AttributeError:  # a double without row_factory support (tests)
                     pass
                 self._conn.executescript(_SCHEMA)
+                self._migrate()
                 self._conn.commit()
                 self._initialized = True
             return self._conn
+
+    def _migrate(self) -> None:
+        """Add columns introduced after the first release (safe to run on every open)."""
+        from contextlib import suppress
+
+        for table, columns in _ADDED_COLUMNS.items():
+            with suppress(sqlite3.Error):
+                existing = {row[1] for row in self._conn.execute(f"PRAGMA table_info({table})")}
+                for name, decl in columns.items():
+                    if name not in existing:
+                        self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
     def _execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
         with self._lock:
@@ -106,21 +123,21 @@ class Ledger:
 
     def upsert_worktree(
         self, *, worktree_id: str, workspace: str, path: str, branch: str,
-        base_commit: str | None, shadow: bool, state: str = "active",
+        base_commit: str | None, shadow: bool, state: str = "active", repo_root: str | None = None,
     ) -> None:
         now = _now()
         existing = self.get_worktree(worktree_id)
         if existing is None:
             self._execute(
-                "INSERT INTO worktrees (id, workspace, path, branch, base_commit, shadow, state, created_at, updated_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (worktree_id, workspace, path, branch, base_commit, int(shadow), state, now, now),
+                "INSERT INTO worktrees (id, workspace, path, branch, base_commit, shadow, state, repo_root,"
+                " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (worktree_id, workspace, path, branch, base_commit, int(shadow), state, repo_root, now, now),
             )
         else:
             self._execute(
-                "UPDATE worktrees SET workspace=?, path=?, branch=?, base_commit=?, shadow=?, state=?, updated_at=?"
-                " WHERE id=?",
-                (workspace, path, branch, base_commit, int(shadow), state, now, worktree_id),
+                "UPDATE worktrees SET workspace=?, path=?, branch=?, base_commit=?, shadow=?, state=?,"
+                " repo_root=?, updated_at=? WHERE id=?",
+                (workspace, path, branch, base_commit, int(shadow), state, repo_root, now, worktree_id),
             )
 
     def get_worktree(self, worktree_id: str) -> dict[str, Any] | None:

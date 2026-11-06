@@ -23,17 +23,26 @@
 - Isolation is **working-tree isolation**, not an OS sandbox: `bubblewrap` remains the plugin for
   kernel-level confinement. Documented in the README.
 
-## Milestone 2: Speculative Race Arena, Hooks & Slash/CLI Commands
-- [ ] Implement `worktree_race` parallel multi-worktree candidate evaluator + built-in demo seed (`run_demo_race`)
-- [ ] Implement shadow-Git fallback for non-Git workspaces
-- [ ] Implement lifecycle hooks (`on_session_start`, `post_tool_call`, `pre_verify`, `on_session_finalize`) with live `broadcast_plugin_event` notifications
-- [ ] Implement `plugin/cli.py` for in-session `/worktree` slash command (with `ctx.ask_choice` interactive prompts) and `hermes worktree` CLI subcommands
-- [ ] Add unit tests for hooks, slash commands, CLI commands, and race arena
+## Milestone 2: Speculative Race Arena, Hooks & Slash/CLI Commands — DONE
+- [x] Implement `plugin/race.py`: `worktree_race` parallel evaluator (thread pool, hard timeouts with process-group kill, deterministic scoring) + built-in offline demo seed (`run_demo_race`)
+- [x] Implement shadow-Git fallback for non-Git workspaces (`plugin/shadow.py`) with credential/binary/artifact exclusion and promotion back into the real folder
+- [x] Implement `plugin/hooks.py`: `on_session_start`, `post_tool_call` (throttled, emits Desktop events), `pre_verify` (optional verification gate), `on_session_finalize` (bounded prune)
+- [x] Implement `plugin/cli.py`: `/sandbox` slash command (interactive picker, unattended-safe) and `hermes worktree` CLI
+- [x] Serialize Git mutations so parallel race candidates cannot collide on `git worktree add`
+- [x] Exclude build artifacts and credential-shaped files from change reports, diffs and promotion
+- [x] 148 tests pass, Ruff clean, `hermes plugins validate` passes with 0 errors / 0 warnings, vertical slice passes in real Hermes
+
+**Milestone 2 notes / risks:**
+- **Name collision found and fixed:** Hermes already ships a built-in `/worktree` slash command
+  (session worktrees), so the plugin registers `/sandbox` instead. `hermes worktree` (CLI) is free.
+- The demo was originally framed as "regex vs state machine, faster wins". That was wrong — a Python
+  state machine is *slower* than C `re.findall`, so the demo now races on **correctness**, which is
+  the real value prop ("the arena found the implementation that passes your tests").
 
 ## Milestone 3: Unified Desktop UI (`desktop/plugin.js`) & FastAPI Backend (`dashboard/plugin_api.py`)
-- [ ] Create `dashboard/manifest.json` and `dashboard/plugin_api.py` mounting `/api/plugins/worktree-sandbox/*` (`GET /status`, `GET /worktrees`, `GET /diff/{id}`, `POST /create`, `POST /promote`, `POST /discard`, `POST /race`, `POST /demo`)
-- [ ] Create `desktop/plugin.js` using `@hermes/plugin-sdk`, `react`, and `react/jsx-runtime` (Right-hand Worktree & Arena Inspector pane, Status Bar live diff chip, ⌘K Palette commands, and `::worktree-card` inline transcript directive)
-- [ ] Verify `desktop/plugin.js` passes `hermes_cli.plugin_validate_desktop.check_desktop_surface` with zero errors and zero warnings
+- [ ] `dashboard/manifest.json` + `dashboard/plugin_api.py` (`/api/plugins/worktree-sandbox/*`)
+- [ ] `desktop/plugin.js`: docked Worktree/Arena pane, status-bar diff chip, ⌘K commands, `::worktree-card` transcript directive
+- [ ] Verify `check_desktop_surface` passes with zero errors and zero warnings
 
 ## Milestone 4: End-to-End Integration Tests, Documentation Polish & Catalog Entry
 - [ ] Write `tests/test_hermes_integration.py` running `validate_plugin_dir`, `scan_plugin_payloads.py`, and `validate_plugin_catalog.py`

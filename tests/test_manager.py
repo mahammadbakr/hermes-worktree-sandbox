@@ -176,11 +176,46 @@ def test_prune_keeps_dirty_worktrees(manager, git_repo: Path) -> None:
     assert dirty["worktree_id"] in remaining
 
 
-def test_non_git_workspace_raises(manager, tmp_path: Path) -> None:
+def test_non_git_workspace_uses_shadow_repo(manager, tmp_path: Path) -> None:
+    """A plain folder is mirrored into a private shadow repo so isolation still works."""
     plain = tmp_path / "plain"
     plain.mkdir()
-    with pytest.raises(WorktreeError, match="not inside a Git repository"):
-        manager.create_worktree(str(plain), task_id="x")
+    (plain / "main.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    info = manager.create_worktree(str(plain), task_id="shadow")
+    assert info["shadow"] is True
+    assert info["workspace"] == str(plain.resolve())
+    wt = Path(info["path"])
+    assert (wt / "main.py").read_text(encoding="utf-8") == "VALUE = 1\n"
+
+    # A change inside the shadow worktree is promoted back into the real folder.
+    (wt / "main.py").write_text("VALUE = 2\n", encoding="utf-8")
+    result = manager.promote(info["worktree_id"])
+    assert result["ok"] is True
+    assert (plain / "main.py").read_text(encoding="utf-8") == "VALUE = 2\n"
+
+
+def test_shadow_mirror_skips_credentials(manager, tmp_path: Path) -> None:
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    (plain / "keep.py").write_text("X = 1\n", encoding="utf-8")
+    (plain / ".env").write_text("SECRET=leak\n", encoding="utf-8")
+    (plain / "server.pem").write_text("KEY\n", encoding="utf-8")
+
+    info = manager.create_worktree(str(plain), task_id="noleak")
+    wt = Path(info["path"])
+    assert (wt / "keep.py").exists()
+    assert not (wt / ".env").exists()
+    assert not (wt / "server.pem").exists()
+
+
+def test_peek_workspace_has_no_side_effects(manager, tmp_path: Path) -> None:
+    plain = tmp_path / "quiet"
+    plain.mkdir()
+    before = list(manager.shadow_root.iterdir()) if manager.shadow_root.is_dir() else []
+    assert manager.peek_workspace(str(plain)) == plain.resolve()
+    after = list(manager.shadow_root.iterdir()) if manager.shadow_root.is_dir() else []
+    assert before == after
 
 
 def test_repo_without_commits_raises(manager, tmp_path: Path) -> None:

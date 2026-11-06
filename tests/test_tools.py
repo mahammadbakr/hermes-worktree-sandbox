@@ -54,7 +54,17 @@ def test_status_outside_repo_lists_all(tools: WorktreeTools, tmp_path: Path) -> 
     outside.mkdir()
     listed = _loads(tools.worktree_status({"workspace": str(outside)}))
     assert listed["ok"] is True
-    assert listed["workspace"] is None
+    assert listed["worktrees"] == []
+
+
+def test_status_does_not_create_shadow_repo(tools: WorktreeTools, tmp_path: Path) -> None:
+    outside = tmp_path / "quiet"
+    outside.mkdir()
+    manager = tools.manager
+    before = list(manager.shadow_root.iterdir()) if manager.shadow_root.is_dir() else []
+    _loads(tools.worktree_status({"workspace": str(outside)}))
+    after = list(manager.shadow_root.iterdir()) if manager.shadow_root.is_dir() else []
+    assert before == after
 
 
 @pytest.mark.parametrize(
@@ -78,12 +88,13 @@ def test_unknown_worktree_id_is_clean_error(tools: WorktreeTools) -> None:
     assert "unknown worktree" in payload["error"]
 
 
-def test_create_on_non_git_workspace_is_clean_error(tools: WorktreeTools, tmp_path: Path) -> None:
+def test_create_on_non_git_workspace_uses_shadow_repo(tools: WorktreeTools, tmp_path: Path) -> None:
     plain = tmp_path / "plain"
     plain.mkdir()
-    payload = _loads(tools.worktree_create({"workspace": str(plain), "task_id": "x"}))
-    assert payload["ok"] is False
-    assert "not inside a Git repository" in payload["error"]
+    (plain / "main.py").write_text("X = 1\n", encoding="utf-8")
+    payload = _loads(tools.worktree_create({"workspace": str(plain), "task_id": "shadow"}))
+    assert payload["ok"] is True
+    assert payload["shadow"] is True
 
 
 def test_promote_conflict_reports_paths(tools: WorktreeTools, git_repo: Path) -> None:

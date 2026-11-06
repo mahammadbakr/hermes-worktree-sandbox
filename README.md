@@ -2,7 +2,7 @@
 
 **Transactional Git-worktree terminal backend and speculative execution arena for [Hermes Agent](https://github.com/NousResearch/hermes-agent).**
 
-`worktree-sandbox` gives Hermes Agent zero-overhead transactional filesystem isolation on macOS and Linux without Docker or VMs. By implementing Hermes's `TerminalEnvironmentProvider` (`terminal.backend: worktree`) with `uses_host_filesystem = False`, every shell command (`terminal`, `execute_code`) and file operation (`read_file`, `write_file`, `patch`, `search_files`) executes inside an isolated Git worktree while your main checkout stays 100% untouched. Even better, its **Speculative Arena** (`worktree_race`) lets Hermes race multiple competing code solutions in parallel worktrees, score them with your real test suite, and promote the winning diff with one click in Hermes Desktop or via `/worktree promote`.
+`worktree-sandbox` gives Hermes Agent zero-overhead transactional filesystem isolation on macOS and Linux without Docker or VMs. By implementing Hermes's `TerminalEnvironmentProvider` (`terminal.backend: worktree`) with `uses_host_filesystem = False`, every shell command (`terminal`, `execute_code`) and file operation (`read_file`, `write_file`, `patch`, `search_files`) executes inside an isolated Git worktree while your main checkout stays 100% untouched. Even better, its **Speculative Arena** (`worktree_race`) lets Hermes race multiple competing code solutions in parallel worktrees, score them with your real test suite, and promote the winning diff with one click in Hermes Desktop or via `/sandbox promote`.
 
 ![Worktree Sandbox Hero BannerPlaceholder](docs/assets/banner-placeholder.svg)
 
@@ -37,7 +37,7 @@ To use `worktree` as your default transactional terminal backend:
 hermes config set terminal.backend worktree
 ```
 
-*(Optional)* Even when `terminal.backend` is left on `local`, the 5 `worktree_*` tools, `/worktree` slash command, `hermes worktree` CLI, and Desktop Arena pane remain fully available!
+*(Optional)* Even when `terminal.backend` is left on `local`, the 5 `worktree_*` tools, `/sandbox` slash command, `hermes worktree` CLI, and Desktop Arena pane remain fully available!
 
 ---
 
@@ -46,19 +46,22 @@ hermes config set terminal.backend worktree
 ### 1. Run the Instant Built-In Demo Race
 From any Hermes chat (CLI, TUI, Desktop, or Telegram/Discord):
 ```text
-/worktree demo
+/sandbox demo
 ```
 Or from your terminal:
 ```bash
 hermes worktree demo
 ```
-This creates a self-contained sandbox repository, races two competing parser implementations (**Candidate A: Regex** vs **Candidate B: State Machine**) in isolated Git worktrees, runs automated verification benchmarks, and prints the scored leaderboard and inline `::worktree-card` directive.
+This seeds a self-contained demo project and races two competing parser implementations
+(**Candidate A: `quick-split`** — the obvious first attempt — vs **Candidate B: `careful`** — trims,
+normalises keys and tolerates noise) in isolated Git worktrees, runs the project's own test suite
+against each, and prints the scored leaderboard.
 
 ### 2. Inspect, Diff & Promote Changes
 ```text
-/worktree status
-/worktree diff <worktree_id>
-/worktree promote <worktree_id>
+/sandbox status
+/sandbox diff <worktree_id>
+/sandbox promote <worktree_id>
 ```
 
 ---

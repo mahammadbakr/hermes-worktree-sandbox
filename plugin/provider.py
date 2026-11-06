@@ -213,9 +213,11 @@ class WorktreeSandboxProvider(TerminalEnvironmentProvider):
     is_container = False
     session_isolated_when_nonpersistent = True
 
-    def __init__(self, get_config: Any | None = None, manager: WorktreeManager | None = None) -> None:
+    def __init__(self, get_config: Any | None = None, manager: WorktreeManager | None = None,
+                 on_created: Any | None = None) -> None:
         self._get_config = get_config
         self._manager = manager or WorktreeManager()
+        self._on_created = on_created
 
     @property
     def manager(self) -> WorktreeManager:
@@ -313,6 +315,12 @@ class WorktreeSandboxProvider(TerminalEnvironmentProvider):
 
         scratch = self._manager.scratch_root / info["worktree_id"]
         scratch.mkdir(parents=True, exist_ok=True)
+
+        if callable(self._on_created):
+            try:
+                self._on_created(str(task_id), info["worktree_id"])
+            except Exception:  # pragma: no cover - bookkeeping only
+                logger.debug("worktree-sandbox: on_created callback failed", exc_info=True)
 
         return WorktreeEnvironment(
             worktree_id=info["worktree_id"],

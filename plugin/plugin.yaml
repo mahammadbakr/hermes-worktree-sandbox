@@ -26,7 +26,12 @@ provides_tools:
   - worktree_status
   - worktree_diff
   - worktree_promote
-provides_hooks: []
+  - worktree_race
+provides_hooks:
+  - on_session_start
+  - post_tool_call
+  - pre_verify
+  - on_session_finalize
 requires_env: []
 capabilities: []
 python_dependencies: []
@@ -46,6 +51,11 @@ config_schema:
     default: ""
     label: Default verification command
     description: Optional shell command (e.g. pytest -q) run during worktree_race or pre_verify checks.
+  verify_timeout:
+    type: int
+    default: 60
+    label: Verification timeout (seconds)
+    description: How long a pre_verify / worktree_race verification command may run before it is killed.
   max_worktrees:
     type: int
     default: 20

@@ -12,8 +12,10 @@ import logging
 import os
 from typing import Any
 
+from .events import emit as _emit
 from .manager import WorktreeError, WorktreeManager
-from .storage import PLUGIN_NAME, Ledger
+from .race import RaceRunner
+from .storage import Ledger
 
 logger = logging.getLogger(__name__)
 
@@ -24,16 +26,6 @@ def _ok(**payload: Any) -> str:
 
 def _err(message: str, **extra: Any) -> str:
     return json.dumps({"ok": False, "error": message, **extra}, default=str)
-
-
-def _emit(event: str, payload: dict[str, Any]) -> None:
-    """Best-effort push to connected Desktop/TUI clients; never raises."""
-    try:
-        from hermes_cli.plugin_events import broadcast_plugin_event
-
-        broadcast_plugin_event(PLUGIN_NAME, event, payload)
-    except Exception:  # pragma: no cover - no client attached / older core
-        logger.debug("worktree-sandbox: broadcast of %s failed", event, exc_info=True)
 
 
 def _session_workspace(args: dict[str, Any]) -> str:
@@ -50,11 +42,12 @@ def _session_workspace(args: dict[str, Any]) -> str:
 
 
 class WorktreeTools:
-    """Bundles the manager + ledger behind the four tool handlers."""
+    """Bundles the manager + ledger behind the worktree tool handlers."""
 
     def __init__(self, manager: WorktreeManager | None = None, ledger: Ledger | None = None) -> None:
         self.ledger = ledger or Ledger()
         self.manager = manager or WorktreeManager(self.ledger)
+        self.racer = RaceRunner(self.manager, self.ledger)
 
     # -- worktree_create ---------------------------------------------------------
 
@@ -84,7 +77,7 @@ class WorktreeTools:
             workspace: str | None = None
             include_inactive = bool(args.get("include_inactive", False))
             try:
-                workspace = str(self.manager.resolve_workspace(_session_workspace(args)))
+                workspace = str(self.manager.peek_workspace(_session_workspace(args)))
             except WorktreeError:
                 workspace = None
             worktrees = self.manager.list_worktrees(workspace=workspace, include_inactive=include_inactive)
@@ -142,3 +135,29 @@ class WorktreeTools:
         except Exception as exc:
             logger.warning("worktree_promote failed: %s", exc, exc_info=True)
             return _err(f"worktree_promote failed: {exc}")
+
+    # -- worktree_race -----------------------------------------------------------
+
+    def worktree_race(self, args: dict[str, Any], **kwargs: Any) -> str:
+        try:
+            candidates = args.get("candidates")
+            if not isinstance(candidates, list):
+                return _err("worktree_race requires a 'candidates' array of at least two entries")
+            verify_command = args.get("verify_command")
+            if verify_command is not None and not isinstance(verify_command, str):
+                return _err("verify_command must be a string")
+            timeout = args.get("timeout", 120)
+            result = self.racer.race(
+                _session_workspace(args), candidates,
+                verify_command=(verify_command or None),
+                timeout=timeout if isinstance(timeout, int) else 120,
+                promote_winner=bool(args.get("promote_winner", False)),
+                keep_worktrees=bool(args.get("keep_worktrees", False)),
+            )
+            _emit("race.completed", {"race_id": result["race_id"], "winner": result["winner"]})
+            return _ok(**result)
+        except WorktreeError as exc:
+            return _err(str(exc))
+        except Exception as exc:
+            logger.warning("worktree_race failed: %s", exc, exc_info=True)
+            return _err(f"worktree_race failed: {exc}")

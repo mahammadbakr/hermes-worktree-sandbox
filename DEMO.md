@@ -24,19 +24,19 @@
   - In the terminal on the right, run `git status` on the main checkout: **it is still 100% clean and untouched!**
 - **Voiceover:** *"Because Worktree Sandbox implements Hermes's `TerminalEnvironmentProvider` with `uses_host_filesystem = False`, every file edit and shell command runs inside an isolated Git worktree with secrets stripped—leaving our main checkout completely untouched."*
 
-### 0:30 – 0:58 | Speculative Multi-Branch Arena (`/worktree race`) (28s)
-- **Visual:** Type `/worktree demo` (or click **"Run Speculative Race"** in the Desktop pane / ask Hermes to call `worktree_race` with two candidate optimizations: **Candidate A: Precompiled Regex** vs **Candidate B: Single-Pass State Machine**).
+### 0:30 – 0:58 | Speculative Multi-Branch Arena (`/sandbox race`) (28s)
+- **Visual:** Type `/sandbox demo` (or click **"Run Speculative Race"** in the Desktop pane / ask Hermes to call `worktree_race` with two candidate optimizations: **Candidate A: Precompiled Regex** vs **Candidate B: Single-Pass State Machine**).
 - **What the viewer sees ("Wow" #2):**
-  - Two isolated Git worktrees spin up in parallel (`wt-race-regex` and `wt-race-statemachine`).
-  - Both run the verification test suite and benchmark in parallel.
-  - Inside the chat transcript, an inline `::worktree-card{race_id="..."}` React component renders live, showing:
-    - **Candidate A (`regex`):** `✅ 12/12 tests passed · 18.4 ms · +14/-9 lines · Score: 91.2`
-    - **Candidate B (`statemachine`):** `🏆 WINNER · ✅ 12/12 tests passed · 6.1 ms (3x faster) · +22/-9 lines · Score: 98.4`
-- **Voiceover:** *"Even better: instead of guessing one approach, we can race competing solutions in parallel worktrees. Worktree Sandbox runs our verification suite against each branch, scores them on test pass rate, speed, and diff size, and renders an interactive comparison card right inside the Hermes transcript."*
+  - Two isolated Git worktrees spin up in parallel (`wt-...-quick-split` and `wt-...-careful`).
+  - Both run the project's own test suite, in parallel, inside their own worktree.
+  - The leaderboard prints in chat:
+    - **Candidate A (`quick-split`):** `FAIL · 4 tests failed · score 186.6`
+    - **Candidate B (`careful`):** `🏆 WINNER · PASS · 12 tests, 0 failures · score 1190.35`
+- **Voiceover:** *"Instead of guessing one approach, we race competing solutions in parallel worktrees. Worktree Sandbox runs the project's own test suite against each candidate, scores them on pass/fail, speed and diff size, and promotes the winner — the arena found the implementation that actually works."*
 
 ### 0:58 – 1:15 | One-Click Promotion & Clean Rollback (17s)
 - **Visual:**
-  - Click **"Promote Winner"** on Candidate B in the Desktop pane (or inline card).
-  - Toast notification appears: `Promoted wt-race-statemachine to workspace (1 file updated, backup saved)`.
+  - Click **"Promote Winner"** on Candidate B in the Desktop pane (or `/sandbox promote <id>`).
+  - Toast notification appears: `Promoted wt-...-careful: 1 applied, 0 deleted. backup: ...`
   - Run `git status` and `git diff` in the main terminal: the winning changes are now cleanly applied to the main repo!
-- **Voiceover:** *"With one click—or `/worktree promote` from Telegram, CLI, or Desktop—the winning diff is conflict-checked, backed up, and applied to our main workspace. Zero Docker overhead, works offline on macOS and Linux. Install `worktree-sandbox` from the Hermes Marketplace today."*
+- **Voiceover:** *"With one click—or `/sandbox promote` from Telegram, CLI, or Desktop—the winning diff is conflict-checked, backed up, and applied to our main workspace. Zero Docker overhead, works offline on macOS and Linux. Install `worktree-sandbox` from the Hermes Marketplace today."*
