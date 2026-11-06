@@ -72,6 +72,9 @@ flowchart TB
 
 ### Component Breakdown
 
+All plugin code lives in the `plugin/` subdirectory (declared as `subdir: plugin` in the catalog
+entry), so the repository root stays a plain test/dev root.
+
 | File | Responsibility |
 |---|---|
 | `plugin.yaml` | Manifest v2 declaring `name: worktree-sandbox`, `version: 0.1.0`, `requires_hermes: ">=0.22.5"`, `provides_tools`, `provides_hooks`, `config_schema`. |

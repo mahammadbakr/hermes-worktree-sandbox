@@ -6,3 +6,17 @@ All notable changes to `hermes-worktree-sandbox` (`worktree-sandbox`) are docume
 
 ### Added
 - Initial repository scaffold, architecture plan (`PLAN.md`), research documentation (`RESEARCH.md`), and 90-second demo script (`DEMO.md`).
+- **Milestone 1 — vertical slice.** `plugin/` package with:
+  - `provider.py`: `WorktreeSandboxProvider` (`terminal.backend: worktree`) and `WorktreeEnvironment`
+    (a `BaseEnvironment` with `uses_host_filesystem = False`, scrubbed subprocess environment,
+    private `TMPDIR`, process-group kill, and host-cwd → worktree remapping).
+  - `manager.py`: `WorktreeManager` — create/reuse isolated Git worktrees, change/line-stat
+    collection, unified diff, conflict-checked promotion with `.bak` backups, discard and prune.
+  - `storage.py`: WAL-mode SQLite ledger (`$HERMES_HOME/plugin-data/worktree-sandbox/data.db`).
+  - `security.py`: credential-env scrubbing, sensitive-filename filter, worktree-id and
+    relative-path validation.
+  - `schemas.py` / `tools.py` / `__init__.py`: four tools (`worktree_create`, `worktree_status`,
+    `worktree_diff`, `worktree_promote`) and the plugin entry point.
+- `scripts/vertical_slice.py`: end-to-end proof that runs the plugin inside a real Hermes
+  `PluginManager` and drives the real `terminal` + `worktree_*` tools.
+- 103 unit and integration tests, including real `hermes_cli.plugin_validate` admission checks.

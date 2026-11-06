@@ -19,8 +19,16 @@
 
 ## Install
 
+From the Nous plugin catalog (recommended — pinned, reviewed commit):
+
 ```bash
 hermes plugins install worktree-sandbox --enable
+```
+
+Directly from this repository (the plugin lives in the `plugin/` subdirectory):
+
+```bash
+hermes plugins install <owner>/hermes-worktree-sandbox#plugin --enable
 ```
 
 To use `worktree` as your default transactional terminal backend:

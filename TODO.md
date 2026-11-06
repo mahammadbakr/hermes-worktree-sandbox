@@ -5,17 +5,29 @@
 - [x] Select Idea 1 (`hermes-worktree-sandbox`) and write `PLAN.md`
 - [x] Create git repository scaffold (`LICENSE`, `.gitignore`, `.env.example`, `pytest.ini`, `.github/workflows/ci.yml`, `CHANGELOG.md`, `TODO.md`, `DEMO.md`, `README.md`, `plugin.yaml`)
 
-## Milestone 1: Vertical Slice (Core Provider, Worktree Engine & SQLite Ledger)
-- [ ] Implement `storage.py`: WAL-mode SQLite ledger (`plugin_db("worktree-sandbox")`) tracking worktree sessions, tool mutations, and race runs
-- [ ] Implement `manager.py`: `WorktreeManager` with real `git worktree` lifecycle, shadow-repo fallback for non-Git directories, diff/stat calculation, conflict-safe promotion with `.bak` backup snapshots, and worktree pruning
-- [ ] Implement `provider.py`: `WorktreeSandboxProvider(TerminalEnvironmentProvider)` + `WorktreeEnvironment(BaseEnvironment)` (`uses_host_filesystem = False`, secret env stripping, isolated `TMPDIR`, `is_available()`, `probe()`, `doctor_checks()`, `setup_instructions()`)
-- [ ] Implement `schemas.py`, `tools.py`, and `__init__.py` (`register(ctx)`)
-- [ ] Verify vertical slice loads in real Hermes (`hermes_cli.plugin_validate.validate_plugin_dir`) and passes unit tests
+## Milestone 1: Vertical Slice (Core Provider, Worktree Engine & SQLite Ledger) — DONE
+- [x] Implement `plugin/storage.py`: WAL-mode SQLite ledger tracking worktree sessions, mutation events, and races
+- [x] Implement `plugin/manager.py`: `WorktreeManager` with real `git worktree` lifecycle, diff/stat calculation, conflict-safe promotion with `.bak` backups, discard, and pruning
+- [x] Implement `plugin/provider.py`: `WorktreeSandboxProvider(TerminalEnvironmentProvider)` + `WorktreeEnvironment(BaseEnvironment)` (`uses_host_filesystem = False`, secret env stripping, isolated `TMPDIR`, host-cwd remapping, `is_available()`, `probe()`, `doctor_checks()`, `setup_instructions()`)
+- [x] Implement `plugin/schemas.py`, `plugin/tools.py`, and `plugin/__init__.py` (`register(ctx)`)
+- [x] Add `plugin/security.py` (credential-env scrubbing, sensitive-filename filter, path/id validation)
+- [x] Verify: 103 tests pass, Ruff clean, `hermes plugins validate` equivalent passes with 0 errors / 0 warnings, `scripts/vertical_slice.py` passes against a real Hermes `PluginManager`
+- [ ] Deferred to M2: shadow-Git fallback for non-Git directories (currently a clear error)
+
+**Milestone 1 notes / risks:**
+- The plugin lives in `plugin/` and the catalog entry will carry `subdir: plugin`. This keeps the repo
+  root out of pytest's package chain (a dashed directory name cannot be a Python package) and matches
+  the catalog's own monorepo pattern. Manual install: `hermes plugins install <owner>/<repo>#plugin`.
+- Hermes's terminal tool passes the *session* cwd to `execute()`; the environment remaps any host
+  path under the workspace into the worktree (regression-tested). Without it isolation silently failed.
+- Isolation is **working-tree isolation**, not an OS sandbox: `bubblewrap` remains the plugin for
+  kernel-level confinement. Documented in the README.
 
 ## Milestone 2: Speculative Race Arena, Hooks & Slash/CLI Commands
 - [ ] Implement `worktree_race` parallel multi-worktree candidate evaluator + built-in demo seed (`run_demo_race`)
+- [ ] Implement shadow-Git fallback for non-Git workspaces
 - [ ] Implement lifecycle hooks (`on_session_start`, `post_tool_call`, `pre_verify`, `on_session_finalize`) with live `broadcast_plugin_event` notifications
-- [ ] Implement `cli.py` for in-session `/worktree` slash command (with `ctx.ask_choice` interactive prompts) and `hermes worktree` CLI subcommands (`status`, `list`, `diff`, `promote`, `discard`, `race`, `demo`, `prune`)
+- [ ] Implement `plugin/cli.py` for in-session `/worktree` slash command (with `ctx.ask_choice` interactive prompts) and `hermes worktree` CLI subcommands
 - [ ] Add unit tests for hooks, slash commands, CLI commands, and race arena
 
 ## Milestone 3: Unified Desktop UI (`desktop/plugin.js`) & FastAPI Backend (`dashboard/plugin_api.py`)

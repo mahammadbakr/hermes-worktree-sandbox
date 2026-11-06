@@ -26,13 +26,7 @@ provides_tools:
   - worktree_status
   - worktree_diff
   - worktree_promote
-  - worktree_race
-provides_hooks:
-  - on_session_start
-  - post_tool_call
-  - pre_verify
-  - on_session_finalize
-provides_middleware: []
+provides_hooks: []
 requires_env: []
 capabilities: []
 python_dependencies: []
