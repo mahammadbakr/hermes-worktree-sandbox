@@ -186,6 +186,38 @@ def main() -> int:
         print("FAIL: lifecycle hooks were not registered")
         return 1
 
+    _banner("7b. Bundled skill registered")
+    skills = manager.list_plugin_skills("worktree-sandbox")
+    print("  plugin skills:", skills)
+    if "worktree-sandbox" not in skills:
+        print("FAIL: bundled skill was not registered")
+        return 1
+
+    _banner("8. Dashboard backend discovered and mounted")
+    from hermes_cli.web_server_dashboard import _discover_dashboard_plugins
+
+    discovered = _discover_dashboard_plugins([(plugins_dir, "user")])
+    ours = next((p for p in discovered if p.get("name") == "worktree-sandbox"), None)
+    print("  discovered:", bool(ours), "| has_api:", bool(ours and ours.get("has_api")))
+    if not ours or not ours.get("has_api"):
+        print("FAIL: dashboard manifest not discovered")
+        return 1
+
+    import asyncio
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "hermes_dashboard_plugin_worktree-sandbox", Path(ours["_dir"]) / ours["_api_file"])
+    api_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(api_module)
+    api_status = asyncio.run(api_module.status())
+    print("  GET /status →", {k: api_status[k] for k in ("ok", "count", "dirty", "added", "deleted")})
+    api_demo = asyncio.run(api_module.demo({}))
+    print("  POST /demo  → winner:", api_demo["winner"])
+    if not api_status.get("ok") or api_demo.get("winner") != "careful":
+        print("FAIL: dashboard backend routes did not answer correctly")
+        return 1
+
     _banner("RESULT: vertical slice PASSED")
     print(f"  throwaway home: {hermes_home}")
     return 0

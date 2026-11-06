@@ -10,6 +10,7 @@ without a Hermes checkout.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from . import schemas
 from .cli import WorktreeCommands, make_cli_handler, make_slash_handler, setup_parser
@@ -41,6 +42,16 @@ def register(ctx) -> None:
 
     # Tell the model where its commands actually run.
     ctx.register_system_prompt_section(_PROMPT_SECTION_ID, prompt_note)
+
+    # Ship the workflow guide so the agent knows how to use the arena and the directive.
+    try:
+        skill_md = Path(__file__).parent / "skills" / "worktree-sandbox" / "SKILL.md"
+        if skill_md.is_file():
+            ctx.register_skill(
+                "worktree-sandbox", skill_md,
+                "Isolate edits in a Git worktree, review/promote the diff, and race competing solutions.")
+    except Exception:  # pragma: no cover - a skill is a bonus, never a load failure
+        logger.debug("worktree-sandbox: bundled skill not registered", exc_info=True)
 
     # Tools (declared 1:1 in plugin.yaml provides_tools).
     registrations = (

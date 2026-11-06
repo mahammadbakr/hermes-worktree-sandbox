@@ -337,9 +337,12 @@ def prompt_note(session_info: Any = None) -> str:
     return (
         "Terminal backend: **worktree sandbox**. Your `terminal` and `execute_code` commands, and the "
         "`read_file` / `write_file` / `patch` / `search_files` file tools, operate inside an isolated Git "
-        "worktree — the user's main checkout is NOT modified. The plugin's `worktree_status`, `worktree_diff` "
-        "and `worktree_promote` tools inspect and apply those changes. Report changes you make as pending in "
-        "the worktree, and tell the user their project files are unchanged until they promote."
+        "worktree — the user's main checkout is NOT modified. Use `worktree_status` / `worktree_diff` to "
+        "review pending changes and `worktree_promote` (or `/sandbox promote <id>`) to apply them, and say "
+        "so instead of claiming the user's files changed. When several implementations are plausible, "
+        "`worktree_race` runs them in parallel isolated worktrees and scores them with a verification "
+        "command. Load the `worktree-sandbox` skill for the full workflow, including the "
+        "`::worktree-card{race_id=\"...\"}` directive for an inline Desktop race card."
     )
 
 

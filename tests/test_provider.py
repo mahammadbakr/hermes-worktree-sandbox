@@ -175,7 +175,7 @@ def test_register_wires_surfaces() -> None:
     """register() should register the provider, a prompt section, the tools, hooks and commands."""
     from worktree_sandbox import register
 
-    recorded = {"tools": [], "sections": [], "providers": [], "hooks": [], "commands": [], "cli": []}
+    recorded = {"tools": [], "sections": [], "providers": [], "hooks": [], "commands": [], "cli": [], "skills": []}
 
     class Stub:
         def register_tool(self, name, **kwargs):
@@ -196,6 +196,9 @@ def test_register_wires_surfaces() -> None:
         def register_cli_command(self, name, help, setup_fn, handler_fn=None, **kwargs):
             recorded["cli"].append(name)
 
+        def register_skill(self, name, path, description="", **kwargs):
+            recorded["skills"].append(name)
+
         def get_config(self, key, default=None):
             return default
 
@@ -210,6 +213,7 @@ def test_register_wires_surfaces() -> None:
     }
     assert recorded["commands"] == ["sandbox"]
     assert recorded["cli"] == ["worktree"]
+    assert recorded["skills"] == ["worktree-sandbox"]
 
 
 @pytest.mark.skipif(os.environ.get("CI") == "true", reason="writes to the real HERMES_HOME")

@@ -1,0 +1,8 @@
+{
+  "name": "worktree-sandbox",
+  "label": "Worktree Sandbox",
+  "description": "Backend routes for the Worktree Sandbox pane: managed Git worktrees, diffs, promotion and the speculative race arena.",
+  "version": "0.1.0",
+  "icon": "GitBranch",
+  "api": "plugin_api.py"
+}
