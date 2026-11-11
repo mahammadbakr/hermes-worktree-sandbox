@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Re-pin the catalog entry to the current commit, push it, and update the open catalog PR.
 #
-#   bash scripts/update_catalog_pr.sh
+#   bash scripts/update_catalog_pr.sh [sha]
 #
-# Use after any push to the plugin repo (a SHA bump). The pinned commit must contain the same
-# `plugin/` tree as the pushed HEAD; tests/test_submission.py enforces that locally.
+# Use after any push to the plugin repo (a SHA bump). With no argument it pins HEAD; pass a SHA to
+# pin a specific commit (e.g. the newest one whose CI run is green). The pinned commit must ship the
+# same `plugin/` tree as HEAD — the script refuses otherwise, and tests/test_submission.py enforces
+# it locally too.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -21,8 +23,23 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
-echo "== 1/4  pin the entry to the pushed HEAD =="
-PINNED=$(git rev-parse HEAD)
+echo "== 1/4  pin the entry =="
+HEAD_SHA=$(git rev-parse HEAD)
+PINNED="${1:-$HEAD_SHA}"
+if ! printf '%s' "$PINNED" | grep -Eq '^[0-9a-f]{40}$'; then
+  echo "not a 40-char commit id: $PINNED" >&2
+  exit 1
+fi
+if ! git cat-file -e "$PINNED^{commit}" 2>/dev/null; then
+  echo "commit $PINNED is not in this checkout" >&2
+  exit 1
+fi
+# The pinned commit must ship exactly the plugin tree we are submitting.
+if [ "$(git diff --name-only "$PINNED" HEAD -- plugin/ | wc -l | tr -d ' ')" != "0" ]; then
+  echo "refusing: plugin/ differs between $PINNED and HEAD" >&2
+  git diff --name-only "$PINNED" HEAD -- plugin/ >&2
+  exit 1
+fi
 python3 - "$LOCAL_ENTRY" "$PINNED" <<'PY'
 import re, sys
 path, sha = sys.argv[1], sys.argv[2]
