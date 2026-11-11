@@ -17,10 +17,16 @@ Post on X, tag `@NousResearch`, and put the link in the entry form.
 
 ## 2. Pre-flight (do this once)
 
-> **A connected model is required for the agent beats** (0:14–0:32 and 0:32–0:58). If
-> `hermes status` says `Providers: none connected`, sign in first — `hermes portal` (Nous Portal,
-> free tier works) or `hermes setup`. **The race itself needs no model, no network and no API key**,
-> so the model-free variant in §3 works with nothing connected.
+> **A connected model is required for the agent beats** (0:14–0:32 and 0:32–0:58). Sign in with
+> `hermes portal` (Nous Portal) or `hermes setup`, then confirm `hermes status` shows a provider.
+> **The race itself needs no model, no network and no API key**, so the model-free variant in §3
+> works with nothing connected.
+>
+> **Use a capable model for the recording.** Measured on a free tier model
+> (`upstage/solar-mini4:free`): ~50 s per API call, and instead of acting it went off to
+> `web_search` for documentation — unusable for a 75-second video. Pick a strong model with
+> `hermes model` before you record, or use the model-free variant, which is instant and cannot
+> flake on camera.
 
 > **Command name:** this plugin registers **`hermes sandbox`** and **`/sandbox`**. (`hermes worktree`
 > and `/worktree` belong to Hermes core — they manage *session* worktrees, not this plugin's.)
