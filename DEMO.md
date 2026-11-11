@@ -28,6 +28,10 @@ Post on X, tag `@NousResearch`, and put the link in the entry form.
 > `hermes model` before you record, or use the model-free variant, which is instant and cannot
 > flake on camera.
 
+> **After installing or updating the plugin, restart Hermes** (quit the Desktop app, or stop the
+> gateway). The gateway holds plugin code in memory, so an updated plugin only takes effect in a
+> fresh process — a stale gateway is the one way an already-fixed bug keeps happening on screen.
+>
 > **Command name:** this plugin registers **`hermes sandbox`** and **`/sandbox`**. (`hermes worktree`
 > and `/worktree` belong to Hermes core — they manage *session* worktrees, not this plugin's.)
 
