@@ -3,6 +3,8 @@
 Everything needed to file the entry: the catalog PR, the X post, the form answers, and the
 step-by-step checklist. Fill in the two `<…>` placeholders once the public repo exists.
 
+**Official entry form:** https://form.typeform.com/to/FwJLvOln
+
 **Assumed public repo:** `https://github.com/mahammadbakr/hermes-worktree-sandbox`
 (if the owner/name differ, update `plugin.yaml` → `homepage`, `README.md` → Install, and
 `catalog-entry/worktree-sandbox.yaml` → `repo`).
@@ -217,26 +219,61 @@ $ hermes plugins validate ./plugin
 
 ---
 
-## 3. Entry-form answers (short fields)
+## 3. The official entry form — exact fields
 
-| Field | Answer |
+**Form:** *Hermes Agent Plugin Hackathon Submission Form*
+**URL:** https://form.typeform.com/to/FwJLvOln
+(linked from the official [@NousResearch announcement](https://x.com/NousResearch/status/2118094256438936062))
+
+It is a five-question Typeform. **All five are required** (verified from the page's embedded form
+definition, not guessed):
+
+| Field | Type | Paste this |
+|---|---|---|
+| **Plugin Title** | short text | `Worktree Sandbox` |
+| **Plugin Description** | short text | `Transactional Git-worktree terminal backend and speculative race arena for Hermes Agent: the agent works in an isolated copy of your project and proves which fix is correct before touching your files.` |
+| **Email Address** | email | your email (used for winner contact / prize receipt) |
+| **Discord Username** | short text | your Discord handle — join https://discord.gg/nousresearch first |
+| **X Demo Post Link** | URL | the X post URL of the ≤90 s demo, tagging @NousResearch |
+| **GitHub Link to your Hermes Plugin Pull Request** | URL | `https://github.com/NousResearch/hermes-agent/pull/153343` |
+
+A statement step in the middle ("Submit a PR to add your Plugin to the Hermes Plugin Catalog")
+links to the catalog-submission instructions; click **Continue** to move past it.
+
+Confirmation: a **Submission Received** screen reading *"…We will post a thread from the Nous Research
+X Account (@nousresearch) with the winners shortly following the end of the hackathon
+(November 11th at 1pm PST)."*
+
+> **Deadline nuance worth knowing:** the announcement says **5 PM EST**, while the thank-you copy says
+> the winners thread follows **1 PM PST** (= 4 PM EST). The announced deadline is 5 PM EST; submitting
+> by **4 PM EST** satisfies both readings.
+
+### Longer description (if the field takes more than one line)
+
+> Worktree Sandbox registers a real terminal backend for Hermes Agent (`terminal.backend: worktree`)
+> so every `terminal`, `execute_code` and file-tool call runs inside its own isolated Git worktree,
+> with the credential environment stripped and a private TMPDIR. The user's checkout is byte-for-byte
+> unchanged until they promote, and promotion is conflict-checked against the worktree's base commit
+> and preceded by a timestamped backup. `worktree_race` then runs two to five candidate solutions in
+> parallel worktrees, verifies each with the project's own command (hard timeout, process-group kill)
+> and scores them pass/fail -> speed -> diff size, so a faster-but-wrong candidate can never win.
+> A docked Hermes Desktop pane, a status-bar diff chip and an inline `::worktree-card` transcript
+> directive surface the result, with one-click promote. No network calls, no API keys, no Docker;
+> macOS and Linux. MIT.
+
+### Supporting answers (not asked by this form, but useful in a PR or Discord thread)
+
+| Question you may be asked | Answer |
 |---|---|
-| Entry / plugin name | Worktree Sandbox (`worktree-sandbox`) |
-| One-line description | Transactional Git-worktree terminal backend and speculative race arena for Hermes Agent: the agent works in an isolated copy of your project and proves which fix is correct before touching your files. |
-| Repository | `https://github.com/mahammadbakr/hermes-worktree-sandbox` |
-| Catalog PR | `<PR URL once opened>` |
-| Demo video (X) | `<X post URL once posted>` |
 | Category | Tools |
 | Plugin type | Terminal environment provider + tools + lifecycle hooks + Desktop UI (unified agent/desktop package) |
-| Extension points | `register_terminal_environment_provider`, `register_tool` ×5, `register_hook` ×4, `register_system_prompt_section`, `register_command`, `register_cli_command`, `register_skill`, dashboard `plugin_api.py`, Desktop plugin SDK |
-| Languages / deps | Python 3.11+ (standard library only) + one ES-module Desktop file. No third-party Python packages. |
-| Why it is more than a prompt or a skill | A prompt can ask a model to be careful. This plugin changes what the harness *does*: a registered environment backend routes every command and file tool into a separate filesystem root at the runtime layer, and `worktree_race` actually executes and verifies competing solutions (including killing hung ones) rather than describing a process. |
-| Requirements | macOS or Linux, `git` + `bash` on PATH, Hermes Agent ≥ 0.22.5. No API keys, no network, no Docker. |
+| Extension points | `register_terminal_environment_provider`, `register_tool` x5, `register_hook` x4, `register_system_prompt_section`, `register_command`, `register_cli_command`, `register_skill`, dashboard `plugin_api.py`, Desktop plugin SDK |
+| Languages / deps | Python 3.11+ standard library only, plus one ES-module Desktop file. No third-party packages. |
+| Why it is more than a prompt or a skill | A prompt can ask a model to be careful. This plugin changes what the harness *does*: a registered environment backend routes every command and file tool into a separate filesystem root at the runtime layer, and `worktree_race` actually executes and verifies competing solutions (including killing hung ones). |
+| Requirements | macOS or Linux, `git` + `bash` on PATH, Hermes Agent >= 0.22.5. |
 | License | MIT |
-| Time to first success | Under 2 minutes: install, then `/sandbox demo` (measure: ~5 s on a fresh `HERMES_HOME`). |
-| What is not included | Windows support; hunk-level cherry-picking; OS-level sandboxing (see README → Limitations). |
-
----
+| Time to first success | Under 2 minutes (measured: ~5 s on a fresh `HERMES_HOME` for load + `/sandbox demo`). |
+| Not included | Windows support; hunk-level cherry-picking; OS-level sandboxing (see README -> Limitations). |
 
 ## 4. Submission checklist — step by step
 
@@ -290,10 +327,13 @@ Do them in this order. Steps 1–2 are the long-lead items (a maintainer must st
 9. Post on X with one of the variant posts above, attached video, tagging `@NousResearch`.
 10. Copy the post URL. Open it in a private window and confirm the video plays.
 
-### Step 4 — submit the entry (Nov 10 evening)
-11. Fill the entry form with the field values in §3, using the PR URL and the X post URL.
-12. Before submitting, open both links in a **logged-out** browser window: the PR must be publicly
-    readable and the X post must play.
+### Step 4 — submit the entry
+
+11. Open **https://form.typeform.com/to/FwJLvOln** and fill the five required fields from §3
+    (Plugin Title, Plugin Description, Email Address, Discord Username, X Demo Post Link,
+    GitHub PR link). Click **Continue** past the PR-instructions statement and submit.
+12. Screenshot the **Submission Received** confirmation. Before submitting, open both links in a
+    **logged-out** browser window: the PR must be publicly readable and the X post must play.
 
 ### Step 5 — monitor (Nov 10–11, buffer)
 13. Join the Nous Research Discord and watch your entry's thread for maintainer questions; be ready
