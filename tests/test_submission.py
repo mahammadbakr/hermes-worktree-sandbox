@@ -11,7 +11,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
-import yaml
+
+# Declared in .github/workflows/ci.yml; skip rather than break collection elsewhere.
+yaml = pytest.importorskip("yaml", reason="pyyaml is required for the catalog-entry guards")
 from helpers import PLUGIN_DIR
 
 REPO_ROOT = PLUGIN_DIR.parent
