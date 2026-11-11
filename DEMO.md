@@ -17,6 +17,15 @@ Post on X, tag `@NousResearch`, and put the link in the entry form.
 
 ## 2. Pre-flight (do this once)
 
+> **A connected model is required for the agent beats** (0:14–0:32 and 0:32–0:58). If
+> `hermes status` says `Providers: none connected`, sign in first — `hermes portal` (Nous Portal,
+> free tier works) or `hermes setup`. **The race itself needs no model, no network and no API key**,
+> so the model-free variant in §3 works with nothing connected.
+
+> **Command name:** this plugin registers **`hermes sandbox`** and **`/sandbox`**. (`hermes worktree`
+> and `/worktree` belong to Hermes core — they manage *session* worktrees, not this plugin's.)
+
+
 ```bash
 # 1. A checkout to record against
 cd <your clone of hermes-worktree-sandbox>
