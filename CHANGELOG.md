@@ -9,7 +9,8 @@ All notable changes to `hermes-worktree-sandbox` (`worktree-sandbox`) are docume
   worktree auditor) exactly as it owns the `/worktree` slash command, so the plugin's CLI
   registration silently lost and the documented `hermes worktree demo` did not exist. Both surfaces
   now share one name: **`/sandbox`** and **`hermes sandbox`**. Found by installing on a real Hermes
-  0.23.1 install rather than a checkout.
+  0.23.1 install rather than a checkout. The status output and `hermes doctor` hints no longer
+  advertise `/worktree demo` either.
 
 ## [0.1.0] - 2026-11-06
 

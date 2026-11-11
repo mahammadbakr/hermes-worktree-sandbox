@@ -66,7 +66,7 @@ class WorktreeCommands:
             return f"worktree: {exc}"
         if not rows:
             return ("No managed worktrees yet. Set `terminal.backend: worktree` (or call "
-                    "`worktree_create`) to isolate a session, or run `/worktree demo` for a live race.")
+                    "`worktree_create`) to isolate a session, or run `/sandbox demo` for a live race.")
         header = f"Worktrees ({len(rows)}):"
         return "\n".join([header, *(_fmt_status_row(r) for r in rows)])
 

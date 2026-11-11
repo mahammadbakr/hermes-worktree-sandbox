@@ -289,8 +289,8 @@ class WorktreeSandboxProvider(TerminalEnvironmentProvider):
             "Worktree Sandbox runs every command and file edit in an isolated Git worktree.",
             "Select it for a project with: hermes config set terminal.backend worktree",
             "Your main checkout is untouched until you promote a worktree:",
-            "  /worktree status      — list worktrees and their diff stats",
-            "  /worktree promote <id> — apply a worktree's changes back to your checkout",
+            "  /sandbox status       — list worktrees and their diff stats",
+            "  /sandbox promote <id>  — apply a worktree's changes back to your checkout",
         ]
 
     def create_environment(

@@ -258,7 +258,7 @@ class RaceRunner:
 
 
 # --------------------------------------------------------------------------- #
-# Demo seed — a self-contained, offline race used by `/worktree demo`
+# Demo seed — a self-contained, offline race used by `/sandbox demo`
 # --------------------------------------------------------------------------- #
 
 _DEMO_BASE_PARSER = '''"""Tiny header parser (the version with a bug to fix)."""
