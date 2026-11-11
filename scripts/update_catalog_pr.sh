@@ -53,9 +53,13 @@ PY
 
 echo "== 2/4  commit and push =="
 git add "$LOCAL_ENTRY"
-git commit -q -m "chore(submission): re-pin catalog entry to $PINNED"
-git push -q origin main
-echo "  pushed"
+if git diff --cached --quiet; then
+  echo "  entry already pinned to $PINNED (nothing to commit)"
+else
+  git commit -q -m "chore(submission): re-pin catalog entry to $PINNED"
+fi
+git push -q origin main 2>/dev/null || true
+echo "  pushed (or already up to date)"
 
 echo "== 3/4  refresh the catalog PR branch with the same file =="
 CURRENT_SHA=$(gh api "repos/$FORK/contents/$ENTRY_REL?ref=$BRANCH" --jq '.sha' 2>/dev/null || echo "")
