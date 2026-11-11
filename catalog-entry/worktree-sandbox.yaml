@@ -1,9 +1,3 @@
-# Catalog entry for NousResearch/hermes-agent: plugin-catalog/worktree-sandbox.yaml
-#
-# NOTE FOR SUBMISSION: `sha` must be a 40-character commit that exists in the PUBLIC repo at
-# `repo` (below). Re-pin it after pushing (see submission-checklist in TODO.md):
-#   git rev-parse HEAD    # copy the 40-char value
-# The value here is the local HEAD at the time of writing.
 name: worktree-sandbox
 repo: https://github.com/mahammadbakr/hermes-worktree-sandbox
 sha: 5d4bda4d726383ce95c7726ca74b84f5ef790d79
