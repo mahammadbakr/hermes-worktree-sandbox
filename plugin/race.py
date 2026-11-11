@@ -274,6 +274,11 @@ def parse_header(line):
     return items
 '''
 
+_DEMO_GITIGNORE = """__pycache__/
+*.pyc
+.pytest_cache/
+"""
+
 _DEMO_TEST = '''import unittest
 
 from parser import parse_header
@@ -348,6 +353,9 @@ def seed_demo_project(root: Path) -> Path:
     project.mkdir(parents=True, exist_ok=True)
     (project / "parser.py").write_text(_DEMO_BASE_PARSER, encoding="utf-8")
     (project / "test_parser.py").write_text(_DEMO_TEST, encoding="utf-8")
+    # Without this, running the tests in the demo project leaves __pycache__/ behind and the
+    # demo's "your checkout is still clean" beat stops being true.
+    (project / ".gitignore").write_text(_DEMO_GITIGNORE, encoding="utf-8")
     _git_init(project)
     return project
 

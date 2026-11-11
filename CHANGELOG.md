@@ -2,6 +2,14 @@
 
 All notable changes to `hermes-worktree-sandbox` (`worktree-sandbox`) are documented in this file.
 
+## [0.1.3] - 2026-11-11
+
+### Fixed
+- The seeded demo project now ships a `.gitignore` (`__pycache__/`, `*.pyc`, `.pytest_cache/`).
+  Running the test suite in the project before the race left `__pycache__/` behind, which made the
+  demo's "your checkout is still clean" beat visibly false. The regression test now runs the suite in
+  the project and asserts `git status` is still empty.
+
 ## [0.1.2] - 2026-11-11
 
 ### Fixed

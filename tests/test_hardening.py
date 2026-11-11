@@ -488,3 +488,10 @@ def test_seeded_demo_project_is_a_git_repo(manager) -> None:
 
     log = subprocess.run(["git", "log", "--oneline"], cwd=str(project), capture_output=True, text=True)
     assert log.returncode == 0 and log.stdout.strip()
+
+    # Running the suite in the host project must not dirty it (that is the demo's core claim).
+    subprocess.run(["python3", "-m", "unittest", "-q", "test_parser"], cwd=str(project),
+                   capture_output=True, text=True)
+    after = subprocess.run(["git", "status", "--porcelain"], cwd=str(project),
+                           capture_output=True, text=True)
+    assert after.stdout.strip() == "", f"running the tests dirtied the checkout: {after.stdout!r}"
