@@ -6,7 +6,7 @@
 # The value here is the local HEAD at the time of writing.
 name: worktree-sandbox
 repo: https://github.com/mahammadbakr/hermes-worktree-sandbox
-sha: f31d13ffbbe06aa61804f616bb5672c5efa3ddf5
+sha: 5d4bda4d726383ce95c7726ca74b84f5ef790d79
 subdir: plugin
 version: "0.1.0"
 title: Worktree Sandbox
