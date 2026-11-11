@@ -338,12 +338,49 @@ def parse_header(line):
 
 
 def seed_demo_project(root: Path) -> Path:
-    """Write the demo project into *root* (idempotent) and return its path."""
+    """Write the demo project into *root* (idempotent) and return its path.
+
+    The project is initialised as a real Git repository when ``git`` is available, so the demo's
+    "your checkout is untouched" beat is literally true: ``git status`` works, is clean before the
+    agent runs, and the agent's edits land in a worktree instead.
+    """
     project = Path(root)
     project.mkdir(parents=True, exist_ok=True)
     (project / "parser.py").write_text(_DEMO_BASE_PARSER, encoding="utf-8")
     (project / "test_parser.py").write_text(_DEMO_TEST, encoding="utf-8")
+    _git_init(project)
     return project
+
+
+def _git_init(project: Path) -> None:
+    """Best-effort ``git init`` + initial commit for a seeded demo project."""
+    import subprocess
+
+    from .security import sanitize_env
+
+    env = sanitize_env(os.environ)
+    env.update({
+        "GIT_AUTHOR_NAME": "Worktree Sandbox Demo", "GIT_AUTHOR_EMAIL": "demo@localhost",
+        "GIT_COMMITTER_NAME": "Worktree Sandbox Demo", "GIT_COMMITTER_EMAIL": "demo@localhost",
+        "GIT_CONFIG_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0",
+    })
+    try:
+        for args in (
+            ["init", "-b", "main"],
+            ["add", "-A"],
+            ["commit", "-m", "demo project: header parser with failing tests"],
+        ):
+            proc = subprocess.run(["git", *args], cwd=str(project), capture_output=True,
+                                  text=True, timeout=30, env=env, stdin=subprocess.DEVNULL)
+            if proc.returncode != 0 and args[0] != "init":
+                # A demo without its own repo still works (the shadow repo covers it); say so plainly.
+                import logging
+
+                logging.getLogger(__name__).debug(
+                    "worktree-sandbox: demo project git %s failed: %s", args[0], proc.stderr.strip()[:200])
+                return
+    except (OSError, subprocess.SubprocessError):
+        return
 
 
 def demo_candidates() -> list[dict[str, Any]]:

@@ -2,6 +2,19 @@
 
 All notable changes to `hermes-worktree-sandbox` (`worktree-sandbox`) are documented in this file.
 
+## [0.1.2] - 2026-11-11
+
+### Fixed
+- **`terminal.backend: worktree` was unusable on a real install.** Hermes substitutes a generic
+  in-container default (`/root`) whenever a backend does not declare `default_cwd`, and the provider
+  treated that value as the workspace, so *every* `terminal` / `write_file` call failed with
+  `workspace is not a directory: /root`. A cwd that is not an existing directory (or is the `/root`
+  default) now falls back to the session's own working directory, then the process cwd. Found only by
+  running a real agent turn on a real install — a checkout-based test could not see it.
+- **The seeded demo project is now a real Git repository** (best-effort `git init` + initial commit),
+  so the demo's "your checkout is untouched" beat actually works: `git status` is clean before the
+  agent runs and the agent's edits land in a worktree instead.
+
 ## [0.1.1] - 2026-11-11
 
 ### Fixed

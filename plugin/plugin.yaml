@@ -1,6 +1,6 @@
 name: worktree-sandbox
 label: Worktree Sandbox
-version: "0.1.1"
+version: "0.1.2"
 manifest_version: 2
 api_version: 1
 kind: standalone

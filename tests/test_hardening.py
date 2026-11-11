@@ -7,6 +7,7 @@ concurrency, repeated load/unload, and upgrading a pre-existing ledger to the cu
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import subprocess
 import threading
@@ -26,6 +27,13 @@ from worktree_sandbox.tools import WorktreeTools
 def tools(manager, ledger) -> WorktreeTools:
     return WorktreeTools(manager=manager, ledger=ledger)
 
+
+def _init_repo(path: Path, filename: str = "app.py") -> None:
+    (path / filename).write_text("VALUE = 1\n", encoding="utf-8")
+    env = {**os.environ, "GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@e.com",
+           "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@e.com", "GIT_TERMINAL_PROMPT": "0"}
+    for args in (["init", "-b", "main"], ["add", "-A"], ["commit", "-m", "init"]):
+        subprocess.run(["git", *args], cwd=str(path), capture_output=True, env=env, check=True)
 
 def _loads(raw: str) -> dict:
     payload = json.loads(raw)
@@ -413,3 +421,70 @@ def test_git_operations_never_inherit_credentials(manager, git_repo: Path, monke
     monkeypatch.setenv("GITHUB_TOKEN", "ghp_should_not_leak")
     manager.status(manager.create_worktree(str(git_repo), task_id="env")["worktree_id"])
     assert "GITHUB_TOKEN" not in captured.get("env", {})
+
+
+# --- 13. Hermes passes a generic container default as cwd ------------------- #
+
+def test_container_default_cwd_falls_back_to_the_session_directory(tmp_path, monkeypatch) -> None:
+    """Regression: Hermes passes `/root` for a backend with no `default_cwd`.
+
+    Treating that as the workspace made every command fail with
+    "workspace is not a directory: /root".
+    """
+    pytest.importorskip("agent.terminal_env_provider", reason="needs a Hermes Agent checkout")
+    from worktree_sandbox.manager import WorktreeManager
+    from worktree_sandbox.provider import WorktreeSandboxProvider
+    from worktree_sandbox.storage import Ledger
+
+    repo = tmp_path / "proj"
+    repo.mkdir()
+    _init_repo(repo)
+    monkeypatch.chdir(repo)
+
+    provider = WorktreeSandboxProvider(
+        get_config=lambda k, d=None: d,
+        manager=WorktreeManager(ledger=Ledger(connection=sqlite3.connect(":memory:", check_same_thread=False)),
+                                data_dir=tmp_path / "data"),
+    )
+    for bogus in ("/root", "", "~", "/nonexistent-path-xyz"):
+        env = provider.create_environment(cwd=bogus, timeout=30, task_id="ctl")
+        assert Path(env.workspace_root) == repo.resolve()
+        result = env.execute("pwd")
+        assert Path(result["output"].strip()).resolve() == Path(env.worktree_path).resolve()
+
+
+def test_real_cwd_is_still_honoured(tmp_path, monkeypatch) -> None:
+    pytest.importorskip("agent.terminal_env_provider", reason="needs a Hermes Agent checkout")
+    from worktree_sandbox.manager import WorktreeManager
+    from worktree_sandbox.provider import WorktreeSandboxProvider
+    from worktree_sandbox.storage import Ledger
+
+    repo = tmp_path / "real"
+    repo.mkdir()
+    _init_repo(repo)
+    provider = WorktreeSandboxProvider(
+        get_config=lambda k, d=None: d,
+        manager=WorktreeManager(ledger=Ledger(connection=sqlite3.connect(":memory:", check_same_thread=False)),
+                                data_dir=tmp_path / "data"),
+    )
+    env = provider.create_environment(cwd=str(repo), timeout=30, task_id="real")
+    assert Path(env.workspace_root) == repo.resolve()
+
+
+# --- 14. the demo project is a real Git repository -------------------------- #
+
+def test_seeded_demo_project_is_a_git_repo(manager) -> None:
+    """Regression: the demo's "your checkout is untouched" beat needs `git status` to work."""
+    from worktree_sandbox.race import run_demo_race
+
+    result = run_demo_race(manager)
+    project = Path(result["project"])
+    assert (project / ".git").exists(), "seeded demo project is not a Git repository"
+
+    status = subprocess.run(["git", "status", "--porcelain"], cwd=str(project),
+                            capture_output=True, text=True)
+    assert status.returncode == 0
+    assert status.stdout.strip() == "", f"demo project is dirty: {status.stdout!r}"
+
+    log = subprocess.run(["git", "log", "--oneline"], cwd=str(project), capture_output=True, text=True)
+    assert log.returncode == 0 and log.stdout.strip()

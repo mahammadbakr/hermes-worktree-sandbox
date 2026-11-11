@@ -293,13 +293,33 @@ class WorktreeSandboxProvider(TerminalEnvironmentProvider):
             "  /sandbox promote <id>  — apply a worktree's changes back to your checkout",
         ]
 
+    def _resolve_workspace_cwd(self, cwd: str | None) -> str:
+        """Turn the cwd Hermes passes into a real workspace directory.
+
+        Hermes substitutes a generic in-container default (``/root``) whenever a backend does not
+        declare ``default_cwd``, and it also passes ``""``/``"~"`` in some flows. None of those is
+        the user's project, and treating one as the workspace made every ``create_environment`` call
+        fail with "workspace is not a directory: /root" — so anything that is not an existing
+        directory falls back to the session's own working directory, then the process cwd.
+        """
+        requested = (cwd or "").strip()
+        if requested and requested not in ("~", "/root", "/") and Path(requested).is_dir():
+            return requested
+        try:
+            from agent.runtime_cwd import resolve_agent_cwd
+
+            resolved = str(resolve_agent_cwd())
+            if resolved and Path(resolved).is_dir():
+                return resolved
+        except Exception:  # pragma: no cover - older cores / gateway context
+            logger.debug("worktree-sandbox: resolve_agent_cwd unavailable", exc_info=True)
+        return os.getcwd()
+
     def create_environment(
         self, *, cwd: str, timeout: int, task_id: str = "default", image: str | None = None,
         container_config: dict[str, Any] | None = None, **kwargs: Any,
     ) -> WorktreeEnvironment:
-        requested = (cwd or "").strip()
-        if requested in ("", "~"):
-            requested = os.getcwd()
+        requested = self._resolve_workspace_cwd(cwd)
         try:
             info = self._manager.get_or_create(requested, task_id=task_id)
         except WorktreeError as exc:
