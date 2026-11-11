@@ -1,4 +1,4 @@
-"""``/worktree`` slash command and ``hermes worktree`` CLI.
+"""``/sandbox`` slash command and ``hermes sandbox`` CLI.
 
 Both share one verb dispatcher so the text output is identical everywhere (CLI, TUI, Desktop,
 Telegram/Discord/Slack). The slash command additionally offers an interactive picker via
@@ -221,7 +221,7 @@ def make_slash_handler(ctx, commands: WorktreeCommands) -> Callable[..., str]:
 
 
 # --------------------------------------------------------------------------- #
-# `hermes worktree` CLI
+# `hermes sandbox` CLI
 # --------------------------------------------------------------------------- #
 
 def setup_parser(subparser: argparse.ArgumentParser) -> None:

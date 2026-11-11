@@ -395,7 +395,7 @@ def _trim_demo_projects(manager: WorktreeManager, *, keep: int) -> int:
 
 
 def purge_demo_projects(manager: WorktreeManager) -> int:
-    """Remove every seeded demo project (used by `hermes worktree demo --reset`)."""
+    """Remove every seeded demo project (used by `hermes sandbox demo --reset`)."""
     root = manager.data_dir / "demo"
     if not root.is_dir():
         return 0

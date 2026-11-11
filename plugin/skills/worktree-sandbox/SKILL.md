@@ -65,6 +65,6 @@ plain text instead, so always include the human-readable leaderboard too.
 
 ## Demo
 
-`/sandbox demo` (or `hermes worktree demo`) runs a self-contained offline race — no network, no API
+`/sandbox demo` (or `hermes sandbox demo`) runs a self-contained offline race — no network, no API
 key — seeding a small project and racing a failing candidate against a passing one. Useful for
 explaining the feature to the user.

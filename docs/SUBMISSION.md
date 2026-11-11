@@ -149,7 +149,7 @@ hermes chat
 #      /sandbox demo            -> offline race, no network and no API key
 #      /sandbox status          -> worktrees with +added/-deleted stats
 #      /sandbox promote <id>    -> apply with a backup
-hermes worktree demo           # the same demo from the terminal
+hermes sandbox demo            # the same demo from the terminal
 
 # 3. The plugin's own suite (227 tests) and the end-to-end proof
 HERMES_AGENT_REPO=/path/to/hermes-agent python3 scripts/vertical_slice.py

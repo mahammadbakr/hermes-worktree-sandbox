@@ -51,7 +51,7 @@ hermes config set terminal.backend worktree
 ```
 
 You do **not** have to change the backend: even with `terminal.backend: local`, the five
-`worktree_*` tools, the `/sandbox` command, the `hermes worktree` CLI and the Desktop pane are
+`worktree_*` tools, the `/sandbox` command, the `hermes sandbox` CLI and the Desktop pane are
 available for explicit isolation and racing.
 
 Requirements: **macOS or Linux**, `git` and `bash` on `PATH`, Hermes Agent ≥ 0.22.5. No API keys, no
@@ -70,7 +70,7 @@ network access, no extra Python dependencies.
 or from a terminal:
 
 ```bash
-hermes worktree demo
+hermes sandbox demo
 ```
 
 This seeds a self-contained project and races two parsers in parallel worktrees, then prints:
@@ -147,13 +147,14 @@ or `skipped` list when something was deliberately left out, so nothing is droppe
 | Command | Where |
 |---|---|
 | `/sandbox [status\|list\|diff <id>\|promote <id> [--force]\|discard <id>\|prune [n]\|demo [--reset]\|help]` | CLI, TUI, Desktop, Discord/Slack/Telegram — with an interactive worktree picker when a person can answer |
-| `hermes worktree status [--workspace PATH]` | Terminal |
-| `hermes worktree diff <id>` / `promote <id> [--force]` / `discard <id>` | Terminal |
-| `hermes worktree prune --max N` | Terminal |
-| `hermes worktree demo [--reset] [--keep]` | Terminal |
+| `hermes sandbox status [--workspace PATH]` | Terminal |
+| `hermes sandbox diff <id>` / `promote <id> [--force]` / `discard <id>` | Terminal |
+| `hermes sandbox prune --max N` | Terminal |
+| `hermes sandbox demo [--reset] [--keep]` | Terminal |
 
-> **Note:** Hermes ships its own `/worktree` slash command (session worktrees). This plugin
-> deliberately registers `/sandbox` to avoid the collision; the CLI name `hermes worktree` is free.
+> **Note:** Hermes ships its own `/worktree` slash command *and* its own `hermes worktree` CLI
+> command (both manage session worktrees). This plugin therefore registers **`/sandbox`** and
+> **`hermes sandbox`** to avoid the collision.
 
 ---
 
@@ -188,7 +189,7 @@ flowchart TB
         T["terminal / execute_code / read_file / write_file / patch / search_files"]
         R["tool registry (5 worktree_* tools)"]
         H["hooks: on_session_start, post_tool_call, pre_verify, on_session_finalize"]
-        C["/sandbox + hermes worktree"]
+        C["/sandbox + hermes sandbox"]
     end
     subgraph Plugin["worktree-sandbox"]
         P["WorktreeSandboxProvider (terminal.backend: worktree)"]
@@ -294,7 +295,7 @@ vertical slice `PASSED`.
   promotes a candidate that failed verification.
 - **Shadow repositories** (used only for non-Git folders) mirror text files under 2 MB, up to 5000
   files / 200 MB, excluding credentials and binaries; larger trees are mirrored partially.
-- **Under `plugins.isolation: host`** the `hermes worktree` CLI is not wired and the terminal backend
+- **Under `plugins.isolation: host`** the `hermes sandbox` CLI is not wired and the terminal backend
   refuses (a Hermes limitation, reported by `hermes plugins validate`); all five tools still work.
 - **Background processes** started inside a worktree are Hermes's terminal-tool concern; this plugin
   does not track or reap them.

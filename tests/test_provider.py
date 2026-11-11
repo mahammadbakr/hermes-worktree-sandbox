@@ -212,7 +212,7 @@ def test_register_wires_surfaces() -> None:
         "on_session_start", "post_tool_call", "pre_verify", "on_session_finalize",
     }
     assert recorded["commands"] == ["sandbox"]
-    assert recorded["cli"] == ["worktree"]
+    assert recorded["cli"] == ["sandbox"]
     assert recorded["skills"] == ["worktree-sandbox"]
 
 

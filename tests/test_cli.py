@@ -1,4 +1,4 @@
-"""Tests for the `/worktree` slash command and `hermes worktree` CLI dispatch."""
+"""Tests for the `/sandbox` slash command and `hermes sandbox` CLI dispatch."""
 
 from __future__ import annotations
 
@@ -115,7 +115,7 @@ def test_cli_parser_and_handler(manager, git_repo: Path, capsys) -> None:
     info = manager.create_worktree(str(git_repo), task_id="cli-parser")
     (Path(info["path"]) / "x.txt").write_text("x\n", encoding="utf-8")
 
-    parser = argparse.ArgumentParser(prog="hermes worktree")
+    parser = argparse.ArgumentParser(prog="hermes sandbox")
     setup_parser(parser)  # Hermes hands setup_fn the plugin's own subparser
     handler = make_cli_handler(_commands(manager))
 
@@ -130,7 +130,7 @@ def test_cli_parser_and_handler(manager, git_repo: Path, capsys) -> None:
 
 
 def test_cli_demo_flag(manager, capsys) -> None:
-    parser = argparse.ArgumentParser(prog="hermes worktree")
+    parser = argparse.ArgumentParser(prog="hermes sandbox")
     setup_parser(parser)
     handler = make_cli_handler(_commands(manager))
     args = parser.parse_args(["demo", "--reset"])

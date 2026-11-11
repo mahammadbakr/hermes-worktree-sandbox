@@ -95,8 +95,8 @@ sys.path.insert(0, os.environ["HERMES_AGENT_REPO"])
 import hermes_cli.plugins as hp
 hp.discover_plugins()
 commands = hp.get_plugin_manager()._cli_commands
-assert "worktree" in commands, sorted(commands)
-print("  hermes worktree is registered")
+assert "sandbox" in commands, sorted(commands)
+print("  hermes sandbox is registered")
 PY
 
 elapsed=$(( $(date +%s) - start ))

@@ -2,7 +2,7 @@
 
 Wiring only: the heavy lifting lives in ``manager.py`` (Git worktrees), ``provider.py``
 (``terminal.backend: worktree``), ``race.py`` (the speculative arena), ``hooks.py`` (lifecycle) and
-``cli.py`` (``/worktree`` + ``hermes worktree``). ``register(ctx)`` is called once at startup and must
+``cli.py`` (``/sandbox`` + ``hermes sandbox``). ``register(ctx)`` is called once at startup and must
 stay fast. Hermes-only imports live *inside* ``register`` so the core modules can be unit-tested
 without a Hermes checkout.
 """
@@ -84,12 +84,14 @@ def register(ctx) -> None:
         args_hint="[status|list|diff <id>|promote <id>|discard <id>|prune|demo]",
     )
 
-    # `hermes worktree ...`
+    # `hermes sandbox ...`
+    # NOTE: core already owns `hermes worktree` (session-worktree audit/reclaim), so the CLI
+    # command shares the slash command's name instead.
     ctx.register_cli_command(
-        name="worktree", help="Manage isolated Git worktrees and run the demo race",
+        name="sandbox", help="Manage isolated Git worktrees and run the demo race",
         setup_fn=setup_parser, handler_fn=make_cli_handler(commands),
         description="Inspect and promote isolated Git worktrees created by terminal.backend: worktree.",
     )
 
-    logger.debug("worktree-sandbox registered: %d tools, 4 hooks, /worktree + hermes worktree",
+    logger.debug("worktree-sandbox registered: %d tools, 4 hooks, /sandbox + hermes sandbox",
                  len(schemas.ALL_SCHEMAS))

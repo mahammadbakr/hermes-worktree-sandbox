@@ -2,6 +2,15 @@
 
 All notable changes to `hermes-worktree-sandbox` (`worktree-sandbox`) are documented in this file.
 
+## [0.1.1] - 2026-11-11
+
+### Fixed
+- **`hermes sandbox`, not `hermes worktree`.** Core already owns `hermes worktree` (the session
+  worktree auditor) exactly as it owns the `/worktree` slash command, so the plugin's CLI
+  registration silently lost and the documented `hermes worktree demo` did not exist. Both surfaces
+  now share one name: **`/sandbox`** and **`hermes sandbox`**. Found by installing on a real Hermes
+  0.23.1 install rather than a checkout.
+
 ## [0.1.0] - 2026-11-06
 
 ### Added
@@ -27,7 +36,7 @@ All notable changes to `hermes-worktree-sandbox` (`worktree-sandbox`) are docume
   a command (hard timeout, process-group kill), score on pass/fail + speed + diff size, and
   optionally promote the winner. Git mutations are serialized so parallel candidates cannot
   collide on `git worktree add`.
-- **Built-in offline demo** (`/sandbox demo`, `hermes worktree demo`): seeds a self-contained
+- **Built-in offline demo** (`/sandbox demo`, `hermes sandbox demo`): seeds a self-contained
   project and races a failing `quick-split` parser against a passing `careful` parser — no network,
   no model call, no API key.
 - **Shadow-Git fallback**: a folder that is not a Git repository is mirrored into a private shadow
@@ -36,7 +45,7 @@ All notable changes to `hermes-worktree-sandbox` (`worktree-sandbox`) are docume
 - **Lifecycle hooks**: `on_session_start`, `post_tool_call` (throttled live diff stats + Desktop
   events), `pre_verify` (optional `verify_command` gate that keeps the agent working when
   verification fails), `on_session_finalize` (bounded prune).
-- **`/sandbox` slash command** and **`hermes worktree` CLI** sharing one verb dispatcher
+- **`/sandbox` slash command** and **`hermes sandbox` CLI** sharing one verb dispatcher
   (`status|list|diff|promote|discard|prune|demo`), with an interactive worktree picker where one is
   available and a clean usage hint when nobody can answer.
 - Build artifacts and credential-shaped files are now excluded from change reports, diffs and

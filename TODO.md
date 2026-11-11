@@ -3,7 +3,7 @@
 ## Milestone 0–3 — DONE
 - [x] Research, plan, repo scaffold (`RESEARCH.md`, `PLAN.md`, `DEMO.md`, README, LICENSE, CI)
 - [x] **M1 vertical slice**: worktree terminal backend, manager, ledger, 4 tools (+ proof in real Hermes)
-- [x] **M2 race arena**: `worktree_race`, shadow-Git fallback, 4 hooks, `/sandbox` + `hermes worktree` CLI
+- [x] **M2 race arena**: `worktree_race`, shadow-Git fallback, 4 hooks, `/sandbox` + `hermes sandbox` CLI
 - [x] **M3 Desktop**: docked pane, status chip, palette commands, `::worktree-card` directive, dashboard API, bundled skill
 
 ## Hardening pass (feature freeze) — DONE

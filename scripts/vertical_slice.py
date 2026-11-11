@@ -169,8 +169,8 @@ def main() -> int:
     print("  plugin slash commands:", sorted(manager_commands))
     cli = manager._cli_commands
     print("  plugin CLI commands:", sorted(cli))
-    if "sandbox" not in manager_commands or "worktree" not in cli:
-        print("FAIL: /sandbox or `hermes worktree` was not registered")
+    if "sandbox" not in manager_commands or "sandbox" not in cli:
+        print("FAIL: /sandbox or `hermes sandbox` was not registered")
         return 1
 
     slash = manager_commands["sandbox"]["handler"]
