@@ -22,11 +22,12 @@ Post on X, tag `@NousResearch`, and put the link in the entry form.
 > **The race itself needs no model, no network and no API key**, so the model-free variant in §3
 > works with nothing connected.
 >
-> **Use a capable model for the recording.** Measured on a free tier model
-> (`upstage/solar-mini4:free`): ~50 s per API call, and instead of acting it went off to
-> `web_search` for documentation — unusable for a 75-second video. Pick a strong model with
-> `hermes model` before you record, or use the model-free variant, which is instant and cannot
-> flake on camera.
+> **Prompt tightly, and prefer a strong model.** Measured on the free tier
+> (`upstage/solar-mini4:free`): a single explicit instruction ("use the terminal tool once to run X,
+> then reply with just the failure count") completed in **23 s**; a vaguer one ("fix it and tell me
+> what's pending") spent a minute per call and wandered into `web_search`. For the multi-step
+> *"fix parser.py so all the tests pass"* beat, pick a stronger model with `hermes model` — or use
+> the model-free variant, which is instant and cannot flake on camera.
 
 > **After installing or updating the plugin, restart Hermes** (quit the Desktop app, or stop the
 > gateway). The gateway holds plugin code in memory, so an updated plugin only takes effect in a
