@@ -29,6 +29,12 @@ Post on X, tag `@NousResearch`, and put the link in the entry form.
 > *"fix parser.py so all the tests pass"* beat, pick a stronger model with `hermes model` — or use
 > the model-free variant, which is instant and cannot flake on camera.
 
+> **`worktree_race` invoked by the model asks for approval** (that is the reviewed safety behaviour:
+> the prompt lists the commands and the target folder). It is a good beat to *show* — Hermes is
+> asking before running model-written commands in your project. The `/sandbox demo` and
+> `hermes sandbox demo` paths are user-started and run without a prompt, so they are the
+> friction-free choice when you are short on time.
+>
 > **After installing or updating the plugin, restart Hermes** (quit the Desktop app, or stop the
 > gateway). The gateway holds plugin code in memory, so an updated plugin only takes effect in a
 > fresh process — a stale gateway is the one way an already-fixed bug keeps happening on screen.
