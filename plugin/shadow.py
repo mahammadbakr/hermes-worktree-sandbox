@@ -20,7 +20,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from .security import sanitize_env, should_skip_path
+from .security import minimal_env, should_skip_path
 
 _MAX_FILES = 5000
 _MAX_FILE_BYTES = 2 * 1024 * 1024
@@ -32,7 +32,7 @@ class ShadowRepoError(RuntimeError):
 
 
 def _git(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
-    env = sanitize_env(os.environ)
+    env = minimal_env()
     env.update({
         "GIT_AUTHOR_NAME": "worktree-sandbox", "GIT_AUTHOR_EMAIL": "worktree-sandbox@localhost",
         "GIT_COMMITTER_NAME": "worktree-sandbox", "GIT_COMMITTER_EMAIL": "worktree-sandbox@localhost",

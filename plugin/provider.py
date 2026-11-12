@@ -25,7 +25,7 @@ from agent.terminal_env_provider import TerminalEnvironmentProvider
 from tools.environments.base import BaseEnvironment
 
 from .manager import WorktreeError, WorktreeManager
-from .security import SECRET_ENV_EXACT, sanitize_env
+from .security import SECRET_ENV_EXACT, minimal_env
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,10 @@ class WorktreeEnvironment(BaseEnvironment):
         return self.scratch_dir
 
     def _runtime_env(self) -> dict[str, str]:
-        env = sanitize_env(os.environ)
+        # Allowlist, not denylist: nothing but PATH/HOME/locale/TERM/TMPDIR and our own
+        # HERMES_WORKTREE_* values reaches a command, so provider and vendor keys cannot be read
+        # out of the environment by a model-authored command.
+        env = minimal_env()
         env["TMPDIR"] = self.scratch_dir
         env["PWD"] = self.worktree_path
         env["HERMES_WORKTREE_ID"] = self.worktree_id

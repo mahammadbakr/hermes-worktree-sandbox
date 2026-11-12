@@ -17,6 +17,7 @@ The manager owns three responsibilities:
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 import shutil
@@ -29,11 +30,13 @@ from typing import Any
 
 from .security import (
     is_safe_relative_path,
-    sanitize_env,
+    minimal_env,
     should_skip_path,
     validate_worktree_id,
 )
 from .storage import PLUGIN_NAME, Ledger
+
+logger = logging.getLogger(__name__)
 
 _GIT_TIMEOUT = 30
 _MAX_DIFF_BYTES = 200_000
@@ -56,6 +59,29 @@ class WorktreeError(RuntimeError):
 def _slug(task_id: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(task_id or "").strip().lower()).strip("-")
     return (cleaned[:32].strip("-") or "default")
+
+
+def write_denial(path: str) -> str | None:
+    """Return a user-facing refusal when core forbids writing *path*, else ``None``.
+
+    ``agent.file_safety`` is the same denylist the file tools consult, so a promotion cannot write
+    or unlink a path the agent itself would be refused (credential stores, protected system files,
+    anything outside ``HERMES_WRITE_SAFE_ROOT``). It is imported lazily and defensively: if a future
+    Hermes moves it, promotion keeps working rather than crashing, and the failure is logged.
+    """
+    try:
+        from agent.file_safety import get_write_denied_error
+
+        return get_write_denied_error(path, verb="Promote")
+    except Exception:
+        pass
+    try:
+        from agent.file_safety import is_write_denied
+
+        return f"Promote denied: '{path}' is a protected system/credential file." if is_write_denied(path) else None
+    except Exception:  # pragma: no cover - older core without the module
+        logger.debug("worktree-sandbox: agent.file_safety unavailable; skipping the denylist check")
+        return None
 
 
 class WorktreeManager:
@@ -111,7 +137,7 @@ class WorktreeManager:
         self, args: list[str], cwd: Path, *, timeout: int = _GIT_TIMEOUT,
         check: bool = False, binary: bool = False,
     ) -> subprocess.CompletedProcess:
-        env = sanitize_env(os.environ)
+        env = minimal_env({"GIT_PAGER": "cat", "GIT_TERMINAL_PROMPT": "0", "GIT_CONFIG_NOSYSTEM": "0"})
         env.setdefault("GIT_PAGER", "cat")
         env.setdefault("GIT_TERMINAL_PROMPT", "0")
         env.setdefault("GIT_CONFIG_NOSYSTEM", "0")
@@ -401,6 +427,12 @@ class WorktreeManager:
 
             base_content = self._git_show_bytes(repo, record.get("base_commit"), rel)
             host_path = target / rel
+            denied = write_denial(str(host_path))
+            if denied:
+                # Core's write denylist is the authority for what may be written on this machine;
+                # a promotion that bypassed it could overwrite a credential or a system file.
+                skipped.append({"path": rel, "reason": denied})
+                continue
             host_content = host_path.read_bytes() if host_path.is_file() and not host_path.is_symlink() else None
             src_path = wt_path / rel
             if src_path.is_symlink():
@@ -516,6 +548,10 @@ class WorktreeManager:
         return {"removed": removed, "kept": len(active) - len(removed)}
 
     # -- helpers -----------------------------------------------------------------
+
+    def require(self, worktree_id: str) -> dict[str, Any]:
+        """Public form of :meth:`_require` (used by the approval gate to name the target folder)."""
+        return self._require(worktree_id)
 
     def _require(self, worktree_id: str) -> dict[str, Any]:
         try:

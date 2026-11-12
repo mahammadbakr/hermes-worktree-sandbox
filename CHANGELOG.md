@@ -2,6 +2,32 @@
 
 All notable changes to `hermes-worktree-sandbox` (`worktree-sandbox`) are documented in this file.
 
+## [0.1.4] - 2026-11-12
+
+Catalog review follow-up (all five points from the maintainer review at `c451713`).
+
+### Security
+- **`worktree_race` and `worktree_promote` now go through Hermes' approval gate.** A new
+  `pre_tool_call` hook returns `{"action": "approve", ...}` for both, listing the exact commands the
+  race will run (candidate, setup and verify) and the file list + target folder a promotion will
+  write into. Hermes shows its normal approval prompt, and the call fails closed where nobody can
+  answer (cron, gateway). User-started runs — `/sandbox …` and the Desktop pane, which call the
+  manager directly — are deliberately not gated. If the gate itself fails, it escalates rather than
+  allowing the call.
+- **Child processes get an allowlist, not a denylist.** `sanitize_env(os.environ)` let through keys
+  core's local backend strips (`FAL_KEY`, `API_SERVER_KEY`, …) because they match no suffix. Every
+  spawned child (commands, verification, `git`, the shadow mirror, the worktree shell) now inherits
+  only `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `TERM`, `TMPDIR`, `PWD`, `LANG`, `LC_*` and the
+  plugin's own `HERMES_WORKTREE_*` values.
+- **Promotion honours core's write denylist.** Every path a promotion would write or unlink is
+  checked with `agent.file_safety` and refused (reported in `skipped`) if core forbids it.
+- **The workspace a tool may act on is confined.** A model-supplied `workspace` must be the
+  session's project or inside it; `$HOME`, `$HERMES_HOME`, the filesystem root and anything outside
+  the project are refused with a clear error.
+- **The never-mirror list covers the common credential files**: `credentials` (no extension),
+  `.git-credentials`, `authorized_keys`, `known_hosts`, and the `.ssh/`, `.aws/` and `.gnupg/`
+  directories.
+
 ## [0.1.3] - 2026-11-11
 
 ### Fixed

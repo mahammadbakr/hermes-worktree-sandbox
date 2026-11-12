@@ -51,7 +51,12 @@ def runner(manager):
 
 
 @pytest.fixture
-def git_repo(tmp_path: Path) -> Path:
+def git_repo(tmp_path: Path, monkeypatch) -> Path:
+    """A throwaway repo, with the process cwd inside it.
+
+    The tool handlers refuse a `workspace` outside the session's project, so tests stand in the
+    project the way a real session does.
+    """
     require_git()
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -62,4 +67,5 @@ def git_repo(tmp_path: Path) -> Path:
     (repo / "README.md").write_text("# Demo\n", encoding="utf-8")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-m", "init")
+    monkeypatch.chdir(repo)
     return repo

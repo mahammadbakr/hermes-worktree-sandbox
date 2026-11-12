@@ -30,6 +30,13 @@ _MUTATING_TOOLS = frozenset({
 })
 _REFRESH_INTERVAL_S = 1.5
 _VERIFY_TIMEOUT_S = 60
+_MAX_SHOWN_COMMAND = 160
+
+
+def _short(value: Any) -> str:
+    """One-line, length-bounded rendering of a command for an approval prompt."""
+    text = " ".join(str(value or "").split())
+    return text if len(text) <= _MAX_SHOWN_COMMAND else text[:_MAX_SHOWN_COMMAND] + "…"
 
 
 class HookHandlers:
@@ -64,6 +71,115 @@ class HookHandlers:
     def on_session_start(self, session_id: str = "", model: str = "", platform: str = "", **kwargs: Any) -> None:
         self.ledger.record_event(None, "session.start", {"platform": platform, "model": model})
         emit("session.started", {"session_id": session_id, "platform": platform})
+
+    # -- approval gate -----------------------------------------------------------
+
+    def pre_tool_call(self, tool_name: str = "", args: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any] | None:
+        """Route the plugin's own privileged tool calls through Hermes' approval gate.
+
+        ``worktree_race`` executes commands the model wrote (candidate, setup and verify commands) in
+        its own worktrees rather than through the active terminal backend, and ``worktree_promote``
+        writes into the user's real folder. Both are exactly the calls a person should see, so this
+        hook returns ``{"action": "approve", ...}`` with the commands and the file list, which
+        Hermes turns into its normal approval prompt (and fails closed when nobody can answer, e.g.
+        cron or the gateway).
+
+        User-started runs — the ``/sandbox`` commands and the Desktop pane, which call the manager
+        directly — do not go through tool dispatch and are not gated here.
+        """
+        try:
+            args = args if isinstance(args, dict) else {}
+            if tool_name == "worktree_race":
+                return self._gate_race(args)
+            if tool_name == "worktree_promote":
+                return self._gate_promote(args)
+            return None
+        except Exception as exc:  # never fail open: ask a person instead of running unapproved
+            logger.warning("worktree-sandbox: approval gate failed (%s); escalating to the user", exc)
+            return {
+                "action": "approve",
+                "message": (
+                    f"{tool_name or 'worktree tool'} refused to describe its own call "
+                    f"({exc}). Approve only if you expected it."
+                ),
+            }
+
+    def _gate_race(self, args: dict[str, Any]) -> dict[str, Any] | None:
+        lines: list[str] = []
+        raw_candidates = args.get("candidates")
+        candidates: list[Any] = raw_candidates if isinstance(raw_candidates, list) else []
+        for index, candidate in enumerate(candidates[:5], start=1):
+            if not isinstance(candidate, dict):
+                continue
+            label = str(candidate.get("label") or f"candidate-{index}")[:40]
+            setup = candidate.get("setup_command")
+            command = candidate.get("command")
+            raw_files = candidate.get("files")
+            files: dict[str, Any] = raw_files if isinstance(raw_files, dict) else {}
+            bits = [f"{len(files)} file(s)"] if files else []
+            if setup:
+                bits.append(f"setup: {_short(setup)}")
+            if command:
+                bits.append(f"command: {_short(command)}")
+            lines.append(f"  • {label}: " + ("; ".join(bits) if bits else "no command"))
+        verify = args.get("verify_command")
+        if verify:
+            lines.append(f"  • verify: {_short(verify)}")
+        if len(candidates) > 5:
+            lines.append(f"  • …and {len(candidates) - 5} more")
+
+        message = [
+            "worktree_race will run the following in its own isolated Git worktrees "
+            "(not through your terminal backend):",
+            *lines,
+        ]
+        workspace = args.get("workspace")
+        if isinstance(workspace, str) and workspace.strip():
+            message.append(f"  workspace: {workspace.strip()}")
+        if args.get("promote_winner"):
+            message.append(
+                "It will also promote the winning candidate INTO YOUR PROJECT "
+                f"({workspace.strip() if isinstance(workspace, str) and workspace.strip() else 'the session project'}), "
+                "writing and deleting files there (a backup is written first)."
+            )
+        return {"action": "approve", "message": "\n".join(message), "rule_key": "worktree_race"}
+
+    def _gate_promote(self, args: dict[str, Any]) -> dict[str, Any] | None:
+        worktree_id = str(args.get("worktree_id") or "").strip()
+        if not worktree_id:
+            return None
+        target, changes = "", None
+        try:
+            record = self.manager.require(worktree_id)
+            target = str(record.get("workspace") or "")
+        except Exception:
+            record = None
+        raw_requested = args.get("files")
+        requested: list[Any] = raw_requested if isinstance(raw_requested, list) else []
+        if requested:
+            listed = ", ".join(str(f) for f in requested[:10])
+            if len(requested) > 10:
+                listed += f", …and {len(requested) - 10} more"
+            files_line = f"  files: {listed}"
+        elif record is not None:
+            try:
+                status = self.manager.status(worktree_id)
+                changes = status.get("changed_files")
+                files_line = f"  every changed file in the worktree ({changes} file(s))"
+            except Exception:
+                files_line = "  every changed file in the worktree"
+        else:
+            files_line = "  every changed file in the worktree"
+
+        message = [
+            f"worktree_promote will write '{worktree_id}' into YOUR PROJECT"
+            + (f" at {target}" if target else "")
+            + " (overwriting and deleting files; a timestamped backup is written first):",
+            files_line,
+        ]
+        if args.get("force"):
+            message.append("  force: true — files you edited since the worktree base will be overwritten")
+        return {"action": "approve", "message": "\n".join(message), "rule_key": "worktree_promote"}
 
     def post_tool_call(self, tool_name: str = "", task_id: str = "", **kwargs: Any) -> None:
         if tool_name not in _MUTATING_TOOLS:

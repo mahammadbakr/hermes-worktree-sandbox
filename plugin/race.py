@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from .manager import WorktreeError, WorktreeManager
-from .security import confine_to_root, is_safe_relative_path, sanitize_env
+from .security import confine_to_root, is_safe_relative_path, minimal_env
 from .storage import Ledger
 
 _MAX_OUTPUT_TAIL = 1200
@@ -39,9 +39,8 @@ def _tail(text: str, limit: int = _MAX_OUTPUT_TAIL) -> str:
 def _run_bounded(cwd: Path, command: str, timeout: int) -> dict[str, Any]:
     """Run *command* in *cwd* with a timeout; kill the whole process group on expiry."""
     started = time.monotonic()
-    env = sanitize_env(os.environ)
-    env["GIT_PAGER"] = "cat"
-    env["PAGER"] = "cat"
+    env = minimal_env({"GIT_PAGER": "cat", "PAGER": "cat"})
+    env["HERMES_WORKTREE_ROOT"] = str(cwd)
     try:
         proc = subprocess.Popen(
             ["bash", "-c", command], cwd=str(cwd), env=env,
@@ -364,9 +363,9 @@ def _git_init(project: Path) -> None:
     """Best-effort ``git init`` + initial commit for a seeded demo project."""
     import subprocess
 
-    from .security import sanitize_env
+    from .security import minimal_env
 
-    env = sanitize_env(os.environ)
+    env = minimal_env()
     env.update({
         "GIT_AUTHOR_NAME": "Worktree Sandbox Demo", "GIT_AUTHOR_EMAIL": "demo@localhost",
         "GIT_COMMITTER_NAME": "Worktree Sandbox Demo", "GIT_COMMITTER_EMAIL": "demo@localhost",

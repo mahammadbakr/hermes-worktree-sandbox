@@ -36,9 +36,15 @@ def test_declared_capabilities_match_registrations(report) -> None:
         assert ok, f"{kind}: {detail}"
 
 
-def test_no_private_core_import_warnings(report) -> None:
+def test_private_core_imports_are_only_the_reviewed_exception(report) -> None:
+    """`agent.file_safety` is imported deliberately, at the maintainer's request.
+
+    The catalog review asked promotion to consult core's write denylist; that module is not in the
+    published plugin API, so `hermes plugins validate` warns. Any *other* private import is a bug.
+    """
     offenders = [w for w in report.warnings if "private core" in w]
-    assert offenders == [], "\n".join(offenders)
+    unexpected = [w for w in offenders if "agent.file_safety" not in w]
+    assert unexpected == [], "\n".join(unexpected)
 
 
 def test_no_desktop_surface_violations(report) -> None:

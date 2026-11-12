@@ -26,22 +26,44 @@ def test_is_secret_env_name(name: str, expected: bool) -> None:
     assert security.is_secret_env_name(name) is expected
 
 
-def test_sanitize_env_strips_secrets_and_session_identity() -> None:
-    env = {
-        "PATH": "/usr/bin",
-        "OPENAI_API_KEY": "sk-leak",
-        "MY_TOKEN": "leak",
-        "HERMES_SESSION_ID": "sess-1",
-        "HERMES_RPC_TOKEN": "leak",
-        "SAFE": "keep",
-    }
-    cleaned = security.sanitize_env(env)
-    assert cleaned == {"PATH": "/usr/bin", "SAFE": "keep"}
+def test_minimal_env_is_an_allowlist(monkeypatch) -> None:
+    """Only the documented names cross into a child; everything else is dropped."""
+    monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.setenv("HOME", "/Users/x")
+    monkeypatch.setenv("LANG", "en_GB.UTF-8")
+    monkeypatch.setenv("LC_ALL", "en_GB.UTF-8")
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.setenv("HERMES_WORKTREE_ID", "wt-1")
+    # Names the old suffix denylist let through, plus the per-turn session identity.
+    monkeypatch.setenv("FAL_KEY", "leak")
+    monkeypatch.setenv("API_SERVER_KEY", "leak")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-leak")
+    monkeypatch.setenv("MY_TOKEN", "leak")
+    monkeypatch.setenv("PYTHONPATH", "/leak")
+    monkeypatch.setenv("HERMES_SESSION_ID", "sess-1")
+    monkeypatch.setenv("SOME_UNLISTED_SETTING", "leak")
+
+    env = security.minimal_env()
+    assert env["PATH"] == "/usr/bin"
+    assert env["HOME"] == "/Users/x"
+    assert env["LANG"] == "en_GB.UTF-8"
+    assert env["LC_ALL"] == "en_GB.UTF-8"
+    assert env["TERM"] == "xterm-256color"
+    assert env["HERMES_WORKTREE_ID"] == "wt-1"
+    for leaked in ("FAL_KEY", "API_SERVER_KEY", "OPENAI_API_KEY", "MY_TOKEN",
+                   "PYTHONPATH", "HERMES_SESSION_ID", "SOME_UNLISTED_SETTING"):
+        assert leaked not in env, f"{leaked} leaked into the child environment"
 
 
-def test_sanitize_env_ignores_non_string_values() -> None:
-    cleaned = security.sanitize_env({"A": "b", "BAD": None, "N": 3})  # type: ignore[dict-item]
-    assert cleaned == {"A": "b"}
+def test_minimal_env_merges_caller_extras() -> None:
+    env = security.minimal_env({"GIT_PAGER": "cat", "GIT_TERMINAL_PROMPT": "0"})
+    assert env["GIT_PAGER"] == "cat"
+    assert env["GIT_TERMINAL_PROMPT"] == "0"
+
+
+def test_redacted_env_names_reports_what_is_dropped() -> None:
+    dropped = security.redacted_env_names({"PATH": "/usr/bin", "FAL_KEY": "x", "LC_TIME": "C"})
+    assert dropped == ["FAL_KEY"]
 
 
 @pytest.mark.parametrize("value", ["", "../x", "a/b", "a b", "x" * 65, "id\n"])
@@ -75,6 +97,11 @@ def test_is_safe_relative_path_rejects(value: str) -> None:
         ("auth.json", True),
         ("my_token.json", True),
         ("credentials.json", True),
+        # Review feedback: these were missing from the never-mirror list.
+        ("credentials", True),
+        (".git-credentials", True),
+        ("authorized_keys", True),
+        ("known_hosts", True),
         ("app.py", False),
         ("README.md", False),
     ],
@@ -90,6 +117,12 @@ def test_is_sensitive_filename(name: str, expected: bool) -> None:
         (".git/config", True),
         (".env", True),
         ("assets/logo.png", True),
+        # Review feedback: the credential directories.
+        (".ssh/id_ed25519", True),
+        (".ssh/config", True),
+        (".aws/credentials", True),
+        (".gnupg/secring.gpg", True),
+        (".git-credentials", True),
         ("src/main.py", False),
         ("README.md", False),
     ],

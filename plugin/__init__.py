@@ -71,6 +71,10 @@ def register(ctx) -> None:
                           emoji=emoji, description=description)
 
     # Lifecycle hooks (declared 1:1 in plugin.yaml provides_hooks).
+    # pre_tool_call is the approval gate for our own privileged tools: it escalates
+    # worktree_race (model-written commands) and worktree_promote (writes into the real project)
+    # to Hermes' human-approval prompt.
+    ctx.register_hook("pre_tool_call", hooks.pre_tool_call)
     ctx.register_hook("on_session_start", hooks.on_session_start)
     ctx.register_hook("post_tool_call", hooks.post_tool_call)
     ctx.register_hook("pre_verify", hooks.pre_verify)

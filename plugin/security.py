@@ -2,7 +2,7 @@
 
 Everything here is pure and dependency-free so it can be unit-tested in isolation:
 
-* ``sanitize_env``  — strip credential-shaped variables from a subprocess environment.
+* ``minimal_env``  — build a child environment from a small allowlist.
 * ``is_sensitive_filename`` — decide whether a path must never be mirrored into a
   shadow repository, a diff, or a promotion backup.
 * ``validate_worktree_id`` — reject ids that could escape the managed data directory.
@@ -52,6 +52,14 @@ _HERMES_SESSION_PREFIXES: tuple[str, ...] = (
 # Names we deliberately keep even though they look sensitive-adjacent.
 _ENV_KEEP: frozenset[str] = frozenset({"PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR"})
 
+# The child-environment allowlist. A denylist is the wrong shape here: core's own local backend
+# strips more than a suffix list can express (``FAL_KEY``, ``API_SERVER_KEY``, ... end in none of
+# our suffixes), so a vendor key we failed to enumerate would reach a model-authored command. Only
+# these names (plus ``LC_*`` and our own ``HERMES_WORKTREE_*``) cross into a child process.
+_BASE_ENV_ALLOWLIST: frozenset[str] = frozenset({
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TERM", "TMPDIR", "PWD", "LANG",
+})
+
 
 def is_secret_env_name(name: str) -> bool:
     """Return whether *name* looks like a credential-bearing environment variable."""
@@ -67,31 +75,59 @@ def _is_hermes_session_var(name: str) -> bool:
     return any(name == prefix or name.startswith(prefix) for prefix in _HERMES_SESSION_PREFIXES)
 
 
-def sanitize_env(env: Mapping[str, str]) -> dict[str, str]:
-    """Return a copy of *env* with credential-shaped and per-turn Hermes variables removed."""
-    cleaned: dict[str, str] = {}
-    for key, value in env.items():
+def minimal_env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Build a child-process environment from a small allowlist, not a denylist.
+
+    Only ``PATH``/``HOME``/``USER``/``LOGNAME``/``SHELL``/``TERM``/``TMPDIR``/``PWD``/``LANG``,
+    ``LC_*`` locales and our own ``HERMES_WORKTREE_*`` values are inherited; everything else —
+    provider keys, tool keys, vendor credentials, Hermes's per-turn session identity — is absent
+    from the environment a command or verification child can read. ``extra`` is merged last so
+    callers can add the handful of variables their own child needs (``GIT_PAGER``, git identity).
+    """
+    env: dict[str, str] = {}
+    for key, value in os.environ.items():
         if not isinstance(key, str) or not isinstance(value, str):
             continue
-        if is_secret_env_name(key) or _is_hermes_session_var(key):
-            continue
-        cleaned[key] = value
-    return cleaned
+        if key in _BASE_ENV_ALLOWLIST or key.startswith(("LC_", "HERMES_WORKTREE_")):
+            env[key] = value
+    if extra:
+        for key, value in extra.items():
+            if isinstance(key, str) and isinstance(value, str):
+                env[key] = value
+    return env
+
+
+def redacted_env_names(env: Mapping[str, str] | None = None) -> list[str]:
+    """Names present in *env* (default: ``os.environ``) that the allowlist would drop.
+
+    Used by the diagnostics/tests to prove a credential-shaped variable cannot reach a child.
+    """
+    source = os.environ if env is None else env
+    return sorted(
+        key for key, value in source.items()
+        if isinstance(key, str) and isinstance(value, str)
+        and key not in _BASE_ENV_ALLOWLIST
+        and not key.startswith(("LC_", "HERMES_WORKTREE_"))
+    )
 
 
 # Filenames/patterns that must never be mirrored, diffed, or backed up verbatim.
 _SENSITIVE_NAME_RE = re.compile(
     r"(?i)(^\.env(\.|$)|^\.envrc$|\.pem$|\.key$|\.p12$|\.pfx$|"
     r"(^|[._-])secret([._-]|$)|(^|[._-])token([._-]|$)|(^|[._-])credential([._-]|$)|"
+    r"^credentials$|^credentials\.json$|"
     r"^id_(rsa|dsa|ecdsa|ed25519)$|^\.netrc$|^\.npmrc$|^\.pypirc$|"
-    r"^auth\.json$|^credentials\.json$|serviceaccount.*\.json$)"
+    r"^\.git-credentials$|^authorized_keys$|^known_hosts$|"
+    r"^auth\.json$|serviceaccount.*\.json$)"
 )
 
-# Directory names never mirrored into a shadow snapshot or diffed.
+# Directory names never mirrored into a shadow snapshot or diffed. The credential directories are
+# not a mirroring preference: nothing inside them is ever a project source file.
 SKIP_DIR_NAMES: frozenset[str] = frozenset({
     ".git", ".hg", ".svn", "node_modules", ".venv", "venv", "__pycache__",
     ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", "dist", "build",
     ".next", ".turbo", ".cache", "target", ".hermes", ".idea", ".vscode",
+    ".ssh", ".aws", ".gnupg",
 })
 
 # Extensions that are binary / not worth mirroring as text.

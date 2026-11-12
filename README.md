@@ -219,12 +219,27 @@ rewrite Git history.
 - **Zero network access.** No HTTP requests, no telemetry, no model calls. The demo is fully offline.
 - **No credentials.** The plugin reads no `.env`, `auth.json`, keychain or SSH material. It reads one
   declared setting (`verify_command`) through `ctx.get_config`.
-- **Environment scrubbing** as described above, plus `TMPDIR` isolation per worktree.
+- **Minimal child environment.** Commands, verification runs, `git` invocations and the shadow mirror
+  all inherit an **allowlist** — `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `TERM`, `TMPDIR`, `PWD`,
+  `LANG`, `LC_*` and the plugin's own `HERMES_WORKTREE_*` values — never the parent environment. A
+  suffix denylist would still leak keys core strips (`FAL_KEY`, `API_SERVER_KEY`, …), so there is no
+  denylist to get wrong.
 - **Approvals stay on:** the provider sets `is_container = False`, so Hermes's dangerous-command
   approval prompts remain active for host commands.
+- **The model's privileged calls are approval-gated.** A `pre_tool_call` hook escalates the two tools
+  that run model-written commands or write into the real project, showing the commands and the file
+  list + target. It fails closed where nobody can answer (cron, gateway). `/sandbox …` and the
+  Desktop pane are user-initiated, so they run without an extra prompt.
+- **Core's write denylist is honoured.** Every path a promotion would write or unlink is checked with
+  `agent.file_safety` and refused if core forbids it.
+- **The workspace is confined to the session's project.** A model-supplied `workspace` is refused
+  when it is `$HOME`, `$HERMES_HOME`, the filesystem root, or anywhere outside the session's project.
 - **Path confinement:** worktree ids must match `[A-Za-z0-9_-]{1,64}`; every promote path is checked
   with `is_safe_relative_path` and resolved under the workspace; symlinks inside a worktree are never
   followed or promoted.
+- **Credential files are never mirrored, diffed, backed up or promoted:** `.env*`, `*.pem`, `*.key`,
+  `credentials`, `.git-credentials`, `authorized_keys`, `known_hosts`, `id_rsa`…, and the `.ssh/`,
+  `.aws/` and `.gnupg/` directories.
 - **Local state only:** managed worktrees, promotion backups, shadow repositories and the SQLite
   ledger all live under `$HERMES_HOME/plugin-data/worktree-sandbox/`.
 - **Public surfaces only:** the plugin imports documented plugin APIs (`agent.terminal_env_provider`,
@@ -235,6 +250,10 @@ rewrite Git history.
 `worktree-sandbox` is a **working-tree** sandbox, not an OS sandbox: a command can still read other
 absolute paths on the host. Use the `bubblewrap` (Linux) or `singularity` plugins if you need
 kernel-level confinement.
+
+`hermes plugins validate` reports one warning by design: `agent.file_safety` (core's write denylist)
+is imported deliberately, at the catalog reviewer's request, and is not in the published plugin API.
+Any other private import would be a bug.
 
 ---
 

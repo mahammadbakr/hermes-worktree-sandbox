@@ -278,7 +278,7 @@ def test_repeated_register_is_clean(manager, ledger) -> None:
     register(first)
     register(second)
     assert first.calls == second.calls
-    assert len(first.calls) == 5 + 1 + 1 + 4 + 1 + 1 + 1
+    assert len(first.calls) == 5 + 1 + 1 + 5 + 1 + 1 + 1  # 5 tools, prompt, skill, 5 hooks, command, cli
 
 
 def test_ledger_survives_reopen(data_dir: Path) -> None:
@@ -495,3 +495,137 @@ def test_seeded_demo_project_is_a_git_repo(manager) -> None:
     after = subprocess.run(["git", "status", "--porcelain"], cwd=str(project),
                            capture_output=True, text=True)
     assert after.stdout.strip() == "", f"running the tests dirtied the checkout: {after.stdout!r}"
+
+
+# --- 15. review: privileged tool calls go through Hermes' approval gate ------ #
+
+def test_race_tool_call_is_escalated_to_approval(manager, ledger) -> None:
+    """worktree_race runs model-written commands, so a person must see them first."""
+    hooks = HookHandlers(manager, ledger)
+    directive = hooks.pre_tool_call(tool_name="worktree_race", args={
+        "candidates": [
+            {"label": "regex", "files": {"a.py": "x"}, "command": "python -m pytest -q"},
+            {"label": "sm", "setup_command": "pip install -q foo"},
+        ],
+        "verify_command": "python -m unittest -q test_parser",
+        "promote_winner": True,
+    })
+    assert directive is not None and directive["action"] == "approve"
+    message = directive["message"]
+    assert "worktree_race" in message
+    assert "python -m pytest -q" in message
+    assert "pip install -q foo" in message
+    assert "python -m unittest -q test_parser" in message
+    assert "INTO YOUR PROJECT" in message  # promote_winner is disclosed
+
+
+def test_promote_tool_call_is_escalated_with_target_and_files(manager, ledger, git_repo: Path) -> None:
+    info = manager.create_worktree(str(git_repo), task_id="gate")
+    (Path(info["path"]) / "app.py").write_text("changed\n", encoding="utf-8")
+    hooks = HookHandlers(manager, ledger)
+
+    directive = hooks.pre_tool_call(tool_name="worktree_promote", args={
+        "worktree_id": info["worktree_id"], "force": True,
+    })
+    assert directive is not None and directive["action"] == "approve"
+    assert str(git_repo) in directive["message"]
+    assert "force: true" in directive["message"]
+    assert "1 file(s)" in directive["message"]
+
+    listed = hooks.pre_tool_call(tool_name="worktree_promote", args={
+        "worktree_id": info["worktree_id"], "files": ["app.py", "other.py"],
+    })
+    assert "app.py, other.py" in listed["message"]
+
+
+@pytest.mark.parametrize("tool", ["worktree_status", "worktree_diff", "worktree_create", "terminal", "write_file"])
+def test_unprivileged_tools_are_not_gated(manager, ledger, tool: str) -> None:
+    assert HookHandlers(manager, ledger).pre_tool_call(tool_name=tool, args={}) is None
+
+
+def test_gate_never_fails_open(manager, ledger) -> None:
+    """If the gate itself breaks it must ask a person, not let the call through."""
+    hooks = HookHandlers(manager, ledger)
+    directive = hooks.pre_tool_call(tool_name="worktree_race", args={"candidates": [{"label": None}]})
+    assert directive is None or directive["action"] == "approve"
+
+    class Exploding(dict):
+        def get(self, *_a, **_k):
+            raise RuntimeError("boom")
+
+    directive = hooks.pre_tool_call(tool_name="worktree_promote", args=Exploding())
+    assert directive is not None and directive["action"] == "approve"
+
+
+# --- 16. review: the workspace must be the session's project ------------------ #
+
+def test_workspace_outside_the_project_is_refused(monkeypatch, tmp_path: Path) -> None:
+    from worktree_sandbox.tools import resolve_requested_workspace
+
+    project = tmp_path / "project"
+    project.mkdir()
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    monkeypatch.chdir(project)
+
+    workspace, error = resolve_requested_workspace({"workspace": str(other)})
+    assert workspace is None and error and "outside the session's project" in error
+
+    workspace, error = resolve_requested_workspace({})
+    assert error is None and Path(workspace).resolve() == project.resolve()
+
+
+def test_home_and_hermes_home_are_refused(monkeypatch, tmp_path: Path) -> None:
+    from worktree_sandbox.tools import is_forbidden_workspace
+
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    (tmp_path / "home").mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hh"))
+    (tmp_path / "hh").mkdir()
+
+    assert is_forbidden_workspace(tmp_path / "home") is not None
+    assert is_forbidden_workspace(tmp_path / "home" / "sub") is not None
+    assert is_forbidden_workspace(tmp_path / "hh") is not None
+    assert is_forbidden_workspace(project) is None
+    assert is_forbidden_workspace(project / "pkg") is None
+
+
+def test_race_refuses_a_foreign_workspace(tools: WorktreeTools, monkeypatch, tmp_path: Path) -> None:
+    project = tmp_path / "p"
+    project.mkdir()
+    monkeypatch.chdir(project)
+    payload = _loads(tools.worktree_race({
+        "workspace": str(tmp_path / "outside"),
+        "candidates": [{"label": "a"}, {"label": "b"}],
+    }))
+    assert payload["ok"] is False
+    assert "outside the session's project" in payload["error"]
+
+
+# --- 17. review: promotion honours core's write denylist -------------------- #
+
+def test_promote_refuses_paths_core_denies(manager, git_repo: Path, monkeypatch) -> None:
+    info = manager.create_worktree(str(git_repo), task_id="denied")
+    wt = Path(info["path"])
+    (wt / "ok.txt").write_text("fine\n", encoding="utf-8")
+    (wt / "blocked.txt").write_text("nope\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "worktree_sandbox.manager.write_denial",
+        lambda path: "Promote denied: protected file." if path.endswith("blocked.txt") else None,
+    )
+    result = manager.promote(info["worktree_id"])
+    assert result["applied"] == ["ok.txt"]
+    assert any(s["path"] == "blocked.txt" and "denied" in s["reason"].lower() for s in result["skipped"])
+    assert not (git_repo / "blocked.txt").exists()
+
+
+def test_write_denial_uses_core_when_available() -> None:
+    pytest.importorskip("agent.file_safety", reason="needs a Hermes Agent checkout")
+    from worktree_sandbox.manager import write_denial
+
+    assert write_denial("/etc/passwd") is not None
+    assert write_denial(str(Path.home() / "project" / "app.py")) is None

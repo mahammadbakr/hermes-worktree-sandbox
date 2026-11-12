@@ -209,7 +209,7 @@ def test_register_wires_surfaces() -> None:
     assert recorded["sections"] == ["worktree-sandbox"]
     assert recorded["providers"] == ["worktree"]
     assert set(recorded["hooks"]) == {
-        "on_session_start", "post_tool_call", "pre_verify", "on_session_finalize",
+        "pre_tool_call", "on_session_start", "post_tool_call", "pre_verify", "on_session_finalize",
     }
     assert recorded["commands"] == ["sandbox"]
     assert recorded["cli"] == ["sandbox"]

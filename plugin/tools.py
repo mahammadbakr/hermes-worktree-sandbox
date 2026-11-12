@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 from .events import emit as _emit
@@ -33,12 +34,74 @@ def _session_workspace(args: dict[str, Any]) -> str:
     explicit = args.get("workspace")
     if isinstance(explicit, str) and explicit.strip():
         return explicit.strip()
+    return session_workspace()
+
+
+def session_workspace() -> str:
+    """The session's own working directory (what the model's commands run against)."""
     try:
         from agent.runtime_cwd import resolve_agent_cwd
 
         return str(resolve_agent_cwd())
     except Exception:
         return os.getcwd()
+
+
+def is_forbidden_workspace(path: Path) -> str | None:
+    """Refuse a workspace that must never be raced or promoted into, or ``None`` if it is fine.
+
+    A model-supplied ``workspace`` used to be taken at face value, so ``~`` (or ``$HERMES_HOME``)
+    would have had file edits written straight into it. Home, the Hermes home and the filesystem
+    root are refused outright; everything else must be the session's project or inside it.
+    """
+    try:
+        resolved = path.expanduser().resolve()
+    except (OSError, RuntimeError):
+        return f"workspace {str(path)!r} cannot be resolved"
+
+    homes: list[Path] = []
+    for raw in (os.path.expanduser("~"), os.environ.get("HERMES_HOME")):
+        if raw:
+            try:
+                homes.append(Path(raw).expanduser().resolve())
+            except (OSError, RuntimeError):
+                continue
+    for home in homes:
+        if resolved == home or home in resolved.parents:
+            return (
+                f"refusing to use {resolved} as a workspace: it is (or is inside) a home directory. "
+                "Point the tool at the project you want isolated."
+            )
+    if resolved == resolved.anchor or str(resolved) == "/":
+        return f"refusing to use {resolved} as a workspace"
+
+    try:
+        project = Path(session_workspace()).expanduser().resolve()
+    except (OSError, RuntimeError):
+        project = None
+    if project is not None:
+        # The session's project root (its repo root when it has one) bounds what we will touch.
+        try:
+            root = Path(os.path.realpath(project))
+        except OSError:
+            root = project
+        if not (resolved == root or root in resolved.parents):
+            return (
+                f"refusing workspace {resolved}: it is outside the session's project "
+                f"({root}). Run the tool against the project the session is working in."
+            )
+    return None
+
+
+def resolve_requested_workspace(args: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Return ``(workspace, error)`` for a tool call's ``workspace`` argument."""
+    explicit = args.get("workspace")
+    if not (isinstance(explicit, str) and explicit.strip()):
+        return session_workspace(), None
+    problem = is_forbidden_workspace(Path(explicit.strip()))
+    if problem:
+        return None, problem
+    return explicit.strip(), None
 
 
 def _type_error(key: str, value: Any, expected: str) -> str:
@@ -93,7 +156,9 @@ class WorktreeTools:
                 problem = _check_optional_str(args, key)
                 if problem:
                     return _err(problem)
-            workspace = _session_workspace(args)
+            workspace, problem = resolve_requested_workspace(args)
+            if problem:
+                return _err(problem)
             task_id = str(args.get("task_id") or kwargs.get("task_id") or "default")
             base = args.get("base") or None
             info = self.manager.create_worktree(workspace, task_id=task_id, base=base, reuse=True)
@@ -124,8 +189,11 @@ class WorktreeTools:
 
             workspace: str | None = None
             include_inactive = bool(args.get("include_inactive", False))
+            requested, problem = resolve_requested_workspace(args)
+            if problem:
+                return _err(problem)
             try:
-                workspace = str(self.manager.peek_workspace(_session_workspace(args)))
+                workspace = str(self.manager.peek_workspace(requested))
             except WorktreeError:
                 workspace = None
             worktrees = self.manager.list_worktrees(workspace=workspace, include_inactive=include_inactive)
@@ -211,10 +279,13 @@ class WorktreeTools:
             if problem:
                 return _err(problem)
 
+            workspace, problem = resolve_requested_workspace(args)
+            if problem:
+                return _err(problem)
             verify_command = args.get("verify_command")
             timeout = args.get("timeout", 120)
             result = self.racer.race(
-                _session_workspace(args), candidates,
+                workspace, candidates,
                 verify_command=(verify_command or None),
                 timeout=timeout if isinstance(timeout, int) else 120,
                 promote_winner=bool(args.get("promote_winner", False)),

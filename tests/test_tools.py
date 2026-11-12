@@ -49,20 +49,23 @@ def test_status_lists_all_when_no_id(tools: WorktreeTools, git_repo: Path) -> No
     assert all("worktree_id" in row for row in listed["worktrees"])
 
 
-def test_status_outside_repo_lists_all(tools: WorktreeTools, tmp_path: Path) -> None:
+def test_status_outside_the_project_is_refused(tools: WorktreeTools, tmp_path: Path) -> None:
+    """A workspace the model names outside the session's project is refused, not listed."""
     outside = tmp_path / "nowhere"
     outside.mkdir()
     listed = _loads(tools.worktree_status({"workspace": str(outside)}))
-    assert listed["ok"] is True
-    assert listed["worktrees"] == []
+    assert listed["ok"] is False
+    assert "outside the session's project" in listed["error"]
 
 
-def test_status_does_not_create_shadow_repo(tools: WorktreeTools, tmp_path: Path) -> None:
-    outside = tmp_path / "quiet"
-    outside.mkdir()
+def test_status_does_not_create_shadow_repo(tools: WorktreeTools, tmp_path: Path, monkeypatch) -> None:
+    quiet = tmp_path / "quiet"
+    quiet.mkdir()
+    monkeypatch.chdir(quiet)  # the session's project, so the workspace is allowed
     manager = tools.manager
     before = list(manager.shadow_root.iterdir()) if manager.shadow_root.is_dir() else []
-    _loads(tools.worktree_status({"workspace": str(outside)}))
+    listed = _loads(tools.worktree_status({}))
+    assert listed["ok"] is True
     after = list(manager.shadow_root.iterdir()) if manager.shadow_root.is_dir() else []
     assert before == after
 
@@ -88,10 +91,12 @@ def test_unknown_worktree_id_is_clean_error(tools: WorktreeTools) -> None:
     assert "unknown worktree" in payload["error"]
 
 
-def test_create_on_non_git_workspace_uses_shadow_repo(tools: WorktreeTools, tmp_path: Path) -> None:
+def test_create_on_non_git_workspace_uses_shadow_repo(tools: WorktreeTools, tmp_path: Path,
+                                                      monkeypatch) -> None:
     plain = tmp_path / "plain"
     plain.mkdir()
     (plain / "main.py").write_text("X = 1\n", encoding="utf-8")
+    monkeypatch.chdir(plain)  # the session's project
     payload = _loads(tools.worktree_create({"workspace": str(plain), "task_id": "shadow"}))
     assert payload["ok"] is True
     assert payload["shadow"] is True
@@ -107,14 +112,15 @@ def test_promote_conflict_reports_paths(tools: WorktreeTools, git_repo: Path) ->
     assert payload["conflicts"][0]["path"] == "app.py"
 
 
-def test_handlers_never_raise_on_manager_failure(tools: WorktreeTools, monkeypatch) -> None:
+def test_handlers_never_raise_on_manager_failure(tools: WorktreeTools, monkeypatch, tmp_path) -> None:
     from worktree_sandbox import manager as manager_module
 
     def boom(*_args, **_kwargs):
         raise RuntimeError("kaboom")
 
+    monkeypatch.chdir(tmp_path)  # a valid session project, so the failure is the only error
     monkeypatch.setattr(manager_module.WorktreeManager, "list_worktrees", boom)
-    payload = _loads(tools.worktree_status({"workspace": "/tmp"}))
+    payload = _loads(tools.worktree_status({}))
     assert payload["ok"] is False
     assert "kaboom" in payload["error"]
 
