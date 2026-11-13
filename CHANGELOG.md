@@ -2,6 +2,27 @@
 
 All notable changes to `hermes-worktree-sandbox` (`worktree-sandbox`) are documented in this file.
 
+## [0.1.5] - 2026-11-12
+
+Second catalog review follow-up (three additional points at 2225f995).
+
+### Security
+- **Full commands in the approval prompt.** `_short()` truncated commands at 160 characters, which
+  could hide malicious tails. Commands are now shown in full, with a 2,000-character limit and a
+  refusal of multi-line commands. If a command exceeds the limit or contains newlines, the tool call
+  is refused with a clear message.
+- **Dynamic `rule_key` for approval prompts.** The old fixed keys (`"worktree_race"`,
+  `"worktree_promote"`) meant that a user's "always approve" answer would apply to every future call
+  without prompting. The key is now a hash of the actual commands + workspace + file list + flags, so
+  each distinct invocation prompts again.
+- **The default workspace is now validated too.** A session whose cwd is `~` or `$HERMES_HOME` would
+  have been allowed to mirror the whole home directory. Now the default workspace (the session's cwd)
+  is checked the same way an explicit `workspace` argument is.
+- **Projects inside `~` are allowed; `~` itself is refused.** The old check refused anything inside
+  the user's home, so `~/code/project` was always rejected. Now `~` itself is refused (you cannot
+  sandbox your whole home), but projects *inside* it are allowed when they are the session project.
+  `$HERMES_HOME` is still fully refused (nothing inside it is ever allowed).
+
 ## [0.1.4] - 2026-11-12
 
 Catalog review follow-up (all five points from the maintainer review at `c451713`).

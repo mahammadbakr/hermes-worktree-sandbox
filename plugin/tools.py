@@ -51,57 +51,68 @@ def is_forbidden_workspace(path: Path) -> str | None:
     """Refuse a workspace that must never be raced or promoted into, or ``None`` if it is fine.
 
     A model-supplied ``workspace`` used to be taken at face value, so ``~`` (or ``$HERMES_HOME``)
-    would have had file edits written straight into it. Home, the Hermes home and the filesystem
-    root are refused outright; everything else must be the session's project or inside it.
+    would have had file edits written straight into it. The filesystem root and the Hermes home are
+    refused outright; the user home ``~`` is also refused (but projects *inside* it, like
+    ``~/code/project``, are allowed). Everything else must be the session's project or inside it.
     """
     try:
         resolved = path.expanduser().resolve()
     except (OSError, RuntimeError):
         return f"workspace {str(path)!r} cannot be resolved"
 
-    homes: list[Path] = []
-    for raw in (os.path.expanduser("~"), os.environ.get("HERMES_HOME")):
-        if raw:
-            try:
-                homes.append(Path(raw).expanduser().resolve())
-            except (OSError, RuntimeError):
-                continue
-    for home in homes:
-        if resolved == home or home in resolved.parents:
-            return (
-                f"refusing to use {resolved} as a workspace: it is (or is inside) a home directory. "
-                "Point the tool at the project you want isolated."
-            )
+    # Refuse / unconditionally
     if resolved == resolved.anchor or str(resolved) == "/":
         return f"refusing to use {resolved} as a workspace"
 
+    # Refuse $HERMES_HOME and anything inside it
+    hermes_home = os.environ.get("HERMES_HOME")
+    if hermes_home:
+        try:
+            hh = Path(hermes_home).expanduser().resolve()
+            if resolved == hh or hh in resolved.parents:
+                return f"refusing to use {resolved} as a workspace: it is (or is inside) $HERMES_HOME"
+        except (OSError, RuntimeError):
+            pass
+
+    # Refuse ~ itself, but allow ~/code/project etc.
+    home = Path.home().resolve()
+    if resolved == home:
+        return f"refusing to use {resolved} as a workspace: it is your home directory"
+
+    # The session's project root (its repo root when it has one) bounds what we will touch.
     try:
         project = Path(session_workspace()).expanduser().resolve()
+        root = Path(os.path.realpath(project))
     except (OSError, RuntimeError):
-        project = None
-    if project is not None:
-        # The session's project root (its repo root when it has one) bounds what we will touch.
-        try:
-            root = Path(os.path.realpath(project))
-        except OSError:
-            root = project
-        if not (resolved == root or root in resolved.parents):
-            return (
-                f"refusing workspace {resolved}: it is outside the session's project "
-                f"({root}). Run the tool against the project the session is working in."
-            )
+        return None  # cannot determine the session project; allow and let other checks catch it
+
+    if not (resolved == root or root in resolved.parents):
+        return (
+            f"refusing workspace {resolved}: it is outside the session's project "
+            f"({root}). Run the tool against the project the session is working in."
+        )
     return None
 
 
 def resolve_requested_workspace(args: dict[str, Any]) -> tuple[str | None, str | None]:
-    """Return ``(workspace, error)`` for a tool call's ``workspace`` argument."""
+    """Return ``(workspace, error)`` for a tool call's ``workspace`` argument.
+
+    An explicit ``workspace`` is validated; when absent, the session's cwd is used and *also*
+    validated (a session whose cwd is ``~`` or ``$HERMES_HOME`` must not sandbox the whole home).
+    """
     explicit = args.get("workspace")
-    if not (isinstance(explicit, str) and explicit.strip()):
-        return session_workspace(), None
-    problem = is_forbidden_workspace(Path(explicit.strip()))
+    if isinstance(explicit, str) and explicit.strip():
+        problem = is_forbidden_workspace(Path(explicit.strip()))
+        if problem:
+            return None, problem
+        return explicit.strip(), None
+
+    # Default: the session's cwd — must also be safe
+    default = session_workspace()
+    problem = is_forbidden_workspace(Path(default))
     if problem:
         return None, problem
-    return explicit.strip(), None
+    return default, None
 
 
 def _type_error(key: str, value: Any, expected: str) -> str:

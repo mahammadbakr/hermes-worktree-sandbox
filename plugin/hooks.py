@@ -11,6 +11,7 @@ none of this can break a turn. Two behaviours are deliberately conservative:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 from collections.abc import Callable
@@ -30,13 +31,30 @@ _MUTATING_TOOLS = frozenset({
 })
 _REFRESH_INTERVAL_S = 1.5
 _VERIFY_TIMEOUT_S = 60
-_MAX_SHOWN_COMMAND = 160
+_MAX_COMMAND_LENGTH = 2000
 
 
-def _short(value: Any) -> str:
-    """One-line, length-bounded rendering of a command for an approval prompt."""
-    text = " ".join(str(value or "").split())
-    return text if len(text) <= _MAX_SHOWN_COMMAND else text[:_MAX_SHOWN_COMMAND] + "…"
+def _validate_command(value: Any, label: str) -> str | None:
+    """Return an error message if the command is unsafe to approve, or ``None`` if OK.
+
+    Hermes shows the approval prompt as plain text, so multi-line commands are hard to
+    read and very long commands hide their tail. Refuse both rather than truncate.
+    """
+    if value is None:
+        return None
+    text = str(value)
+    if "\n" in text or "\r" in text:
+        return f"{label} contains newlines; approve by running it in your terminal instead"
+    if len(text) > _MAX_COMMAND_LENGTH:
+        return f"{label} is {len(text)} chars (max {_MAX_COMMAND_LENGTH}); split it or run it in your terminal"
+    return None
+
+
+def _show_command(value: Any) -> str:
+    """Return the command as-is for the approval prompt (caller validated length already)."""
+    if value is None:
+        return ""
+    return " ".join(str(value).split())  # normalise whitespace only, no truncation
 
 
 class HookHandlers:
@@ -108,6 +126,28 @@ class HookHandlers:
         lines: list[str] = []
         raw_candidates = args.get("candidates")
         candidates: list[Any] = raw_candidates if isinstance(raw_candidates, list) else []
+
+        # Validate every command before showing anything
+        for index, candidate in enumerate(candidates[:5], start=1):
+            if not isinstance(candidate, dict):
+                continue
+            label = str(candidate.get("label") or f"candidate-{index}")[:40]
+            setup = candidate.get("setup_command")
+            command = candidate.get("command")
+
+            err = _validate_command(setup, f"setup_command[{label}]")
+            if err:
+                return {"action": "approve", "message": f"Refused: {err}", "rule_key": None}
+            err = _validate_command(command, f"command[{label}]")
+            if err:
+                return {"action": "approve", "message": f"Refused: {err}", "rule_key": None}
+
+        verify = args.get("verify_command")
+        err = _validate_command(verify, "verify_command")
+        if err:
+            return {"action": "approve", "message": f"Refused: {err}", "rule_key": None}
+
+        # Now show them in full
         for index, candidate in enumerate(candidates[:5], start=1):
             if not isinstance(candidate, dict):
                 continue
@@ -118,13 +158,13 @@ class HookHandlers:
             files: dict[str, Any] = raw_files if isinstance(raw_files, dict) else {}
             bits = [f"{len(files)} file(s)"] if files else []
             if setup:
-                bits.append(f"setup: {_short(setup)}")
+                bits.append(f"setup: {_show_command(setup)}")
             if command:
-                bits.append(f"command: {_short(command)}")
+                bits.append(f"command: {_show_command(command)}")
             lines.append(f"  • {label}: " + ("; ".join(bits) if bits else "no command"))
-        verify = args.get("verify_command")
+
         if verify:
-            lines.append(f"  • verify: {_short(verify)}")
+            lines.append(f"  • verify: {_show_command(verify)}")
         if len(candidates) > 5:
             lines.append(f"  • …and {len(candidates) - 5} more")
 
@@ -134,15 +174,20 @@ class HookHandlers:
             *lines,
         ]
         workspace = args.get("workspace")
+        ws_str = workspace.strip() if isinstance(workspace, str) and workspace.strip() else "the session project"
         if isinstance(workspace, str) and workspace.strip():
             message.append(f"  workspace: {workspace.strip()}")
         if args.get("promote_winner"):
             message.append(
-                "It will also promote the winning candidate INTO YOUR PROJECT "
-                f"({workspace.strip() if isinstance(workspace, str) and workspace.strip() else 'the session project'}), "
+                f"It will also promote the winning candidate INTO YOUR PROJECT ({ws_str}), "
                 "writing and deleting files there (a backup is written first)."
             )
-        return {"action": "approve", "message": "\n".join(message), "rule_key": "worktree_race"}
+
+        # Dynamic rule_key: hash of the actual commands + workspace + promote_winner
+        # so each distinct invocation prompts again
+        content = f"race:{candidates!r}:{verify!r}:{ws_str}:{args.get('promote_winner')}"
+        rule_key = f"worktree_race:{hashlib.sha256(content.encode()).hexdigest()[:16]}"
+        return {"action": "approve", "message": "\n".join(message), "rule_key": rule_key}
 
     def _gate_promote(self, args: dict[str, Any]) -> dict[str, Any] | None:
         worktree_id = str(args.get("worktree_id") or "").strip()
@@ -161,15 +206,19 @@ class HookHandlers:
             if len(requested) > 10:
                 listed += f", …and {len(requested) - 10} more"
             files_line = f"  files: {listed}"
+            files_key = listed
         elif record is not None:
             try:
                 status = self.manager.status(worktree_id)
                 changes = status.get("changed_files")
                 files_line = f"  every changed file in the worktree ({changes} file(s))"
+                files_key = f"changed:{changes}"
             except Exception:
                 files_line = "  every changed file in the worktree"
+                files_key = "changed:*"
         else:
             files_line = "  every changed file in the worktree"
+            files_key = "changed:*"
 
         message = [
             f"worktree_promote will write '{worktree_id}' into YOUR PROJECT"
@@ -179,7 +228,12 @@ class HookHandlers:
         ]
         if args.get("force"):
             message.append("  force: true — files you edited since the worktree base will be overwritten")
-        return {"action": "approve", "message": "\n".join(message), "rule_key": "worktree_promote"}
+
+        # Dynamic rule_key: hash of worktree_id + files + force + target
+        # so each distinct invocation prompts again
+        content = f"promote:{worktree_id}:{files_key}:{args.get('force')}:{target}"
+        rule_key = f"worktree_promote:{hashlib.sha256(content.encode()).hexdigest()[:16]}"
+        return {"action": "approve", "message": "\n".join(message), "rule_key": rule_key}
 
     def post_tool_call(self, tool_name: str = "", task_id: str = "", **kwargs: Any) -> None:
         if tool_name not in _MUTATING_TOOLS:

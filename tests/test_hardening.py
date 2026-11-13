@@ -512,7 +512,7 @@ def test_race_tool_call_is_escalated_to_approval(manager, ledger) -> None:
     })
     assert directive is not None and directive["action"] == "approve"
     message = directive["message"]
-    assert "worktree_race" in message
+    assert "worktree_race" in directive.get("rule_key", "")  # dynamic hash key
     assert "python -m pytest -q" in message
     assert "pip install -q foo" in message
     assert "python -m unittest -q test_parser" in message
@@ -528,6 +528,7 @@ def test_promote_tool_call_is_escalated_with_target_and_files(manager, ledger, g
         "worktree_id": info["worktree_id"], "force": True,
     })
     assert directive is not None and directive["action"] == "approve"
+    assert "worktree_promote" in directive.get("rule_key", "")  # dynamic hash key
     assert str(git_repo) in directive["message"]
     assert "force: true" in directive["message"]
     assert "1 file(s)" in directive["message"]
@@ -586,9 +587,22 @@ def test_home_and_hermes_home_are_refused(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hh"))
     (tmp_path / "hh").mkdir()
 
-    assert is_forbidden_workspace(tmp_path / "home") is not None
-    assert is_forbidden_workspace(tmp_path / "home" / "sub") is not None
+    # Refuse $HERMES_HOME and anything inside it
     assert is_forbidden_workspace(tmp_path / "hh") is not None
+    assert is_forbidden_workspace(tmp_path / "hh" / "sub") is not None
+
+    # Refuse ~ itself
+    assert is_forbidden_workspace(tmp_path / "home") is not None
+
+    # ~/code/project is allowed *when it is the session project*
+    home_project = tmp_path / "home" / "code" / "project"
+    home_project.mkdir(parents=True)
+    monkeypatch.chdir(home_project)  # now the session project is inside ~
+    assert is_forbidden_workspace(home_project) is None
+    assert is_forbidden_workspace(home_project / "pkg") is None
+
+    # Back to the original project: a normal project outside home is fine
+    monkeypatch.chdir(project)
     assert is_forbidden_workspace(project) is None
     assert is_forbidden_workspace(project / "pkg") is None
 
@@ -603,6 +617,28 @@ def test_race_refuses_a_foreign_workspace(tools: WorktreeTools, monkeypatch, tmp
     }))
     assert payload["ok"] is False
     assert "outside the session's project" in payload["error"]
+
+
+def test_default_workspace_is_also_checked(monkeypatch, tmp_path: Path) -> None:
+    """The default (session cwd) is validated too; a session in ~ is refused."""
+    from worktree_sandbox.tools import resolve_requested_workspace
+
+    hermes_home = tmp_path / "hh"
+    hermes_home.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+    monkeypatch.chdir(hermes_home)
+
+    # Default workspace (cwd) is $HERMES_HOME -> refused
+    workspace, error = resolve_requested_workspace({})
+    assert workspace is None and error and "$HERMES_HOME" in error
+
+    # A project inside normal home is allowed
+    home_proj = tmp_path / "home" / "code" / "proj"
+    home_proj.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.chdir(home_proj)
+    workspace, error = resolve_requested_workspace({})
+    assert error is None and Path(workspace).resolve() == home_proj.resolve()
 
 
 # --- 17. review: promotion honours core's write denylist -------------------- #
